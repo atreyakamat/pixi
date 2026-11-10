@@ -1,7 +1,7 @@
 import type { LayerSpec, OverlaySpec, Preset } from "@/engine/types";
 import { PRESETS } from "@/presets";
 
-export type Body = "flip" | "compact" | "slab" | "bridge" | "toy" | "phone" | "slider" | "camcorder" | "instant";
+export type Body = "fisheye" | "disposable" | "tv" | "cctv" | "webcam" | "super8" | "flip" | "compact" | "slab" | "bridge" | "toy" | "phone" | "slider" | "camcorder" | "instant";
 export interface CameraDef { brand: string; preset: Preset; body: Body; color: string; model: string; row: "Digicam" | "Special" }
 
 const COLORS = ["#c9ccd1", "#2b2d33", "#d9a441", "#b5474a", "#5b8fb9", "#8fae7e", "#e8e0d0", "#8a6bb0"];
@@ -10,12 +10,18 @@ const hash = (s: string) => { let h = 2166136261; for (const c of s) h = Math.im
 const FAMILY_BODY: Record<string, Body[]> = {
   "Button Phone": ["phone", "slider"],
   "Flip Phone": ["flip"],
+  Fisheye: ["fisheye"],
+  Disposable: ["disposable"],
+  "CRT & TV": ["tv"],
+  "Security Cam": ["cctv"],
+  Webcam: ["webcam"],
+  "Super 8": ["super8"],
   "VHS & Camcorder": ["camcorder"],
   "Instant Print": ["instant"],
   "Toy Lens": ["toy"],
   "35mm Scan": ["bridge", "slab"],
 };
-const DIGI = new Set(["Date Stamp", "Blown-out", "Night Blur", "Flash & Compact", "Golden Hour", "Button Phone", "Flip Phone"]);
+const DIGI = new Set(["Fisheye", "Disposable", "Y2K", "Date Stamp", "Blown-out", "Night Blur", "Flash & Compact", "Golden Hour", "Button Phone", "Flip Phone"]);
 
 // Fictional makers (no real trademarks). Each family belongs to one maker, like a real lineup.
 export const BRAND_OF: Record<string, { brand: string; prefix: string }> = {
@@ -31,6 +37,13 @@ export const BRAND_OF: Record<string, { brand: string; prefix: string }> = {
   "Button Phone": { brand: "Brickwell", prefix: "BW" },
   "Flip Phone": { brand: "Zephyr", prefix: "ZF" },
   Creative: { brand: "Vanta", prefix: "VX" },
+  Fisheye: { brand: "Nimbus", prefix: "NF" },
+  Disposable: { brand: "Tamarind", prefix: "TD" },
+  "CRT & TV": { brand: "Orbis", prefix: "OT" },
+  "Security Cam": { brand: "Orbis", prefix: "OS" },
+  Webcam: { brand: "Nimbus", prefix: "NW" },
+  "Super 8": { brand: "Halcyon", prefix: "HC" },
+  Y2K: { brand: "Kestrel", prefix: "KY" },
 };
 export const BRANDS = Array.from(new Set(Object.values(BRAND_OF).map((b) => b.brand)));
 
@@ -48,25 +61,49 @@ export const CAMERAS: CameraDef[] = PRESETS.map((p) => {
   };
 });
 
-export type EffectId = "date" | "sparkle" | "frame" | "light";
+export type EffectId = "sparkle" | "frame" | "light";
 export const EFFECTS: { id: EffectId; label: string }[] = [
-  { id: "date", label: "Date Stamp" },
   { id: "sparkle", label: "Sparkle" },
   { id: "frame", label: "Frame" },
-  { id: "light", label: "Light" },
+  { id: "light", label: "Light leak" },
 ];
 
-/** Returns a new preset with the chosen effects stacked on top. Looks stay pure data. */
-export function withEffects(base: Preset, on: Set<EffectId>): Preset {
+export interface StampDef { id: string; label: string; sample: string; overlay: OverlaySpec | null }
+const st = (style: "seg7" | "dot" | "sans" | "mono" | "vcr", format: string, color: string, x: number, y: number, size: number, extra: Partial<Extract<OverlaySpec, { kind: "stamp" }>> = {}): OverlaySpec =>
+  ({ kind: "stamp", style, format, color, x, y, size, glow: 0.3, align: "right", ...extra });
+
+/** Timestamp styles. "preset" keeps whatever the look ships with; "off" removes stamps. */
+export const STAMPS: StampDef[] = [
+  { id: "preset", label: "Look default", sample: "auto", overlay: null },
+  { id: "off", label: "Off", sample: "none", overlay: null },
+  { id: "orange", label: "Orange LED", sample: "'26 11 10", overlay: st("seg7", "'YY MM DD", "#ff9a2e", 0.94, 0.94, 0.028) },
+  { id: "orange-time", label: "LED + time", sample: "11 10 '26  17:06", overlay: st("seg7", "MM DD 'YY  HH:mm", "#ff8a1e", 0.94, 0.94, 0.026) },
+  { id: "yellow-dot", label: "Dot matrix", sample: "2026.11.10", overlay: st("dot", "YYYY.MM.DD", "#ffd23c", 0.94, 0.94, 0.03, { glow: 0.4 }) },
+  { id: "white-mono", label: "Clean mono", sample: "11/10/2026", overlay: st("mono", "MM/DD/YYYY", "#ffffff", 0.94, 0.95, 0.026, { glow: 0.1 }) },
+  { id: "vcr", label: "VCR", sample: "TUE 11.10.2026", overlay: st("vcr", "DOW MM.DD.YYYY", "#ffffff", 0.06, 0.92, 0.04, { align: "left", glow: 0.5 }) },
+  { id: "vcr-clock", label: "VCR clock", sample: "05:06 PM", overlay: st("vcr", "hh:mm AMPM", "#ffffff", 0.06, 0.08, 0.04, { align: "left", glow: 0.5 }) },
+  { id: "sans", label: "Sans date", sample: "10.11.2026", overlay: st("sans", "DD.MM.YYYY", "#ffffff", 0.06, 0.95, 0.028, { align: "left", glow: 0.1 }) },
+  { id: "typewriter", label: "Typewriter", sample: "10 / 11 / 26", overlay: st("mono", "DD / MM / YY", "#f2e8c9", 0.5, 0.95, 0.026, { align: "center", glow: 0 }) },
+  { id: "film-edge", label: "Film edge", sample: "'26 11 10", overlay: st("seg7", "'YY MM DD", "#ff9a2e", 0.97, 0.5, 0.026, { rotate: 90, align: "center" }) },
+];
+
+export interface FxState { effects: Set<EffectId>; stamp: string }
+
+/** Returns a new preset with effects stacked on top. Looks stay pure data. */
+export function withEffects(base: Preset, fx: FxState): Preset {
   const layers: LayerSpec[] = [...base.layers];
-  const overlays: OverlaySpec[] = [...(base.overlays ?? [])];
+  let overlays: OverlaySpec[] = [...(base.overlays ?? [])];
+  const { effects: on, stamp } = fx;
   if (on.has("sparkle")) {
     layers.push({ kind: "bloom", params: { threshold: 0.7, intensity: 0.7, radius: 22, warmth: 0.1 } });
     layers.push({ kind: "flare", params: { x: 0.8, y: 0.2, intensity: 0.7, hue: 330, ghosts: 0.5, streakLen: 0.7, angle: 45 } });
   }
   if (on.has("light")) layers.push({ kind: "lightLeak", params: { hue: 20, intensity: 0.55, x: 1, y: 0.4 } });
-  if (on.has("date") && !overlays.some((o) => o.kind === "stamp"))
-    overlays.push({ kind: "stamp", style: "seg7", format: "'YY MM DD", color: "#ff9a2e", x: 0.94, y: 0.94, size: 0.028, glow: 0.35, align: "right" });
+  if (stamp !== "preset") {
+    overlays = overlays.filter((o) => o.kind !== "stamp");
+    const def = STAMPS.find((x) => x.id === stamp);
+    if (def?.overlay) overlays.push(def.overlay);
+  }
   if (on.has("frame") && !overlays.some((o) => o.kind === "frame")) overlays.push({ kind: "frame", style: "polaroid", color: "#f4efe6" });
   return { ...base, layers, overlays };
 }

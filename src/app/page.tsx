@@ -2,42 +2,54 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RetroRenderer, type LcdMode } from "@/engine/renderer";
-import { BRANDS, CAMERAS, EFFECTS, withEffects, type EffectId } from "@/ui/cameras";
+import { BRANDS, CAMERAS, EFFECTS, STAMPS, withEffects, type EffectId } from "@/ui/cameras";
 import { CameraIcon } from "@/ui/CameraIcon";
+import { sampleScene } from "@/ui/sampleScene";
 
-function sampleScene(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 1200; c.height = 1600;
-  const g = c.getContext("2d")!;
-  const sky = g.createLinearGradient(0, 0, 0, 1000);
-  sky.addColorStop(0, "#3b5b8c"); sky.addColorStop(0.6, "#f2a65a"); sky.addColorStop(1, "#ffd8a0");
-  g.fillStyle = sky; g.fillRect(0, 0, 1200, 1600);
-  g.fillStyle = "#fff3c4"; g.beginPath(); g.arc(820, 820, 90, 0, 7); g.fill();
-  g.fillStyle = "#2c2a2e"; g.fillRect(0, 1000, 1200, 600);
-  g.fillStyle = "#3a4a3a"; for (let i = 0; i < 9; i++) g.fillRect(40 + i * 130, 880 - (i % 3) * 60, 90, 200);
-  g.fillStyle = "#d9b89a"; g.beginPath(); g.arc(380, 1180, 120, 0, 7); g.fill();
-  g.fillStyle = "#6b3f2a"; g.fillRect(250, 1290, 260, 300);
-  return c;
-}
+type Shot = { url: string; kind: "photo" | "video"; ext: string };
+type Mode = "photo" | "video";
+
+const cameraError = (e: unknown): string => {
+  const n = (e as { name?: string })?.name;
+  if (n === "NotAllowedError" || n === "SecurityError") return "Camera permission is blocked. Allow camera for this site in your browser settings, then tap Start camera.";
+  if (n === "NotFoundError" || n === "OverconstrainedError") return "No camera was found on this device.";
+  if (n === "NotReadableError") return "The camera is being used by another app. Close it and try again.";
+  return "Could not start the camera. You can still import a photo.";
+};
+
+const pickMime = (): { mime: string; ext: string } => {
+  const list: [string, string][] = [["video/mp4;codecs=avc1", "mp4"], ["video/webm;codecs=vp9", "webm"], ["video/webm;codecs=vp8", "webm"], ["video/webm", "webm"]];
+  for (const [m, e] of list) if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) return { mime: m, ext: e };
+  return { mime: "", ext: "webm" };
+};
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<RetroRenderer | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const srcRef = useRef<{ el: TexImageSource; w: number; h: number } | null>(null);
+  const recRef = useRef<{ rec: MediaRecorder; chunks: Blob[]; ext: string; mic?: MediaStream } | null>(null);
+
   const [camId, setCamId] = useState(CAMERAS[0].preset.id);
   const [effects, setEffects] = useState<Set<EffectId>>(new Set());
-  const [brand, setBrand] = useState<string>("All");
+  const [stamp, setStamp] = useState("preset");
+  const [brand, setBrand] = useState("All");
   const [minimal, setMinimal] = useState(false);
   const [lcd, setLcd] = useState<LcdMode>("off");
   const [intensity, setIntensity] = useState(1);
   const [mirror, setMirror] = useState(false);
   const [live, setLive] = useState(false);
-  const [shots, setShots] = useState<string[]>([]);
+  const [facing, setFacing] = useState<"user" | "environment">("environment");
+  const [mode, setMode] = useState<Mode>("photo");
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [shots, setShots] = useState<Shot[]>([]);
   const [error, setError] = useState("");
+  const [flash, setFlash] = useState(false);
 
   const cam = CAMERAS.find((c) => c.preset.id === camId)!;
-  const preset = useMemo(() => withEffects(cam.preset, effects), [cam, effects]);
+  const preset = useMemo(() => withEffects(cam.preset, { effects, stamp }), [cam, effects, stamp]);
   const optsRef = useRef({ preset, intensity, mirror, lcd });
   optsRef.current = { preset, intensity, mirror, lcd };
 
@@ -52,7 +64,7 @@ export default function Home() {
     const t0 = performance.now();
     const loop = (t: number) => {
       const v = videoRef.current, src = srcRef.current;
-      if (v && v.readyState >= 2) { r.setSource(v, v.videoWidth, v.videoHeight); }
+      if (v && v.readyState >= 2 && v.videoWidth) r.setSource(v, v.videoWidth, v.videoHeight);
       else if (src) r.setSource(src.el, src.w, src.h);
       const a = performance.now();
       r.render({ ...optsRef.current, maxSide: side }, (t - t0) / 1000);
@@ -60,86 +72,215 @@ export default function Home() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); streamRef.current?.getTracks().forEach((t) => t.stop()); };
   }, []);
 
-  const toggleCamera = useCallback(async (facing: "user" | "environment" = "environment") => {
-    try {
-      videoRef.current?.srcObject && (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false });
-      const v = videoRef.current ?? document.createElement("video");
-      v.muted = true; v.playsInline = true; v.srcObject = stream;
-      await v.play();
-      videoRef.current = v; setMirror(facing === "user"); setLive(true); setError("");
-    } catch { setError("Camera unavailable. You can import a photo instead."); }
+  useEffect(() => {
+    if (!recording) return;
+    const t0 = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 250);
+    return () => clearInterval(id);
+  }, [recording]);
+
+  const stopStream = () => { streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null; };
+
+  const startCamera = useCallback(async (want: "user" | "environment") => {
+    if (typeof window === "undefined" || !window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setError("The camera only works on a secure page. Open the https:// link (or localhost), not an http:// address or an embedded preview.");
+      return;
+    }
+    stopStream();
+    const attempts: MediaStreamConstraints[] = [
+      { video: { facingMode: { ideal: want }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+      { video: { facingMode: want }, audio: false },
+      { video: true, audio: false },
+    ];
+    let last: unknown;
+    for (const c of attempts) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(c);
+        let v = videoRef.current;
+        if (!v) {
+          v = document.createElement("video");
+          v.setAttribute("playsinline", ""); v.setAttribute("autoplay", ""); v.muted = true;
+          v.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0";
+          document.body.appendChild(v);
+          videoRef.current = v;
+        }
+        v.srcObject = stream;
+        await v.play();
+        streamRef.current = stream;
+        setFacing(want); setMirror(want === "user"); setLive(true); setError("");
+        return;
+      } catch (e) { last = e; if ((e as { name?: string }).name === "NotAllowedError") break; }
+    }
+    setError(cameraError(last));
   }, []);
 
   const importFile = async (f: File | undefined) => {
     if (!f) return;
-    const bmp = await createImageBitmap(f, { imageOrientation: "from-image" });
-    videoRef.current?.srcObject && (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-    videoRef.current = null; setLive(false); setMirror(false);
-    srcRef.current = { el: bmp, w: bmp.width, h: bmp.height };
+    try {
+      const bmp = await createImageBitmap(f, { imageOrientation: "from-image" });
+      stopStream();
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setLive(false); setMirror(false); setError("");
+      srcRef.current = { el: bmp, w: bmp.width, h: bmp.height };
+    } catch { setError("That file could not be opened as an image."); }
   };
 
-  const shutter = async () => {
-    const r = rendererRef.current!;
-    const blob = await r.capture({ ...optsRef.current, maxSide: 2048, date: new Date() }, performance.now() / 1000);
-    setShots((s) => [URL.createObjectURL(blob), ...s].slice(0, 12));
+  const takePhoto = async () => {
+    setFlash(true); setTimeout(() => setFlash(false), 120);
+    const blob = await rendererRef.current!.capture({ ...optsRef.current, maxSide: 2048, date: new Date() }, performance.now() / 1000);
+    setShots((s) => [{ url: URL.createObjectURL(blob), kind: "photo" as const, ext: "jpg" }, ...s].slice(0, 24));
   };
 
-  const rows = (["Digicam", "Special"] as const).map((row) => ({ row, items: CAMERAS.filter((c) => c.row === row && (brand === "All" || c.brand === brand)) })).filter((r) => r.items.length);
+  const startRecording = async () => {
+    const canvas = canvasRef.current!;
+    const out = canvas.captureStream(30);
+    let mic: MediaStream | undefined;
+    try { mic = await navigator.mediaDevices.getUserMedia({ audio: true }); mic.getAudioTracks().forEach((t) => out.addTrack(t)); } catch { /* record silently */ }
+    const { mime, ext } = pickMime();
+    const rec = new MediaRecorder(out, mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000 } : undefined);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      mic?.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: rec.mimeType || "video/webm" });
+      setShots((s) => [{ url: URL.createObjectURL(blob), kind: "video" as const, ext }, ...s].slice(0, 24));
+    };
+    rec.start(250);
+    recRef.current = { rec, chunks, ext, mic };
+    setElapsed(0); setRecording(true);
+  };
+  const stopRecording = () => { recRef.current?.rec.state !== "inactive" && recRef.current?.rec.stop(); setRecording(false); };
+
+  const onShutter = () => (mode === "photo" ? takePhoto() : recording ? stopRecording() : startRecording());
+  const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  const rows = (["Digicam", "Special"] as const)
+    .map((row) => ({ row, items: CAMERAS.filter((c) => c.row === row && (brand === "All" || c.brand === brand)) }))
+    .filter((r) => r.items.length);
+
+  const chip = (on: boolean) => `shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${on ? "bg-orange-500 text-black" : "bg-neutral-800 text-neutral-300 active:bg-neutral-700"}`;
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md min-w-0 flex-col overflow-x-hidden bg-neutral-950 text-neutral-100">
-      <div className="relative w-full flex-1 overflow-hidden bg-black">
-        <canvas ref={canvasRef} className="block h-[62dvh] w-full object-contain" />
-        {error && <p className="absolute inset-x-0 top-2 text-center text-xs text-amber-300">{error}</p>}
+    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col overflow-x-hidden bg-neutral-950 text-neutral-100">
+      <header className="flex items-center justify-between px-4 pb-2 pt-3">
+        <h1 className="text-lg font-semibold tracking-tight">Pixi</h1>
+        <div className="flex items-center gap-3 text-xs text-neutral-300">
+          <span className="rounded bg-neutral-800 px-2 py-1">{cam.brand} {cam.model}</span>
+          <button onClick={() => setMinimal(!minimal)} className="underline underline-offset-2">{minimal ? "Show controls" : "Minimal"}</button>
+        </div>
+      </header>
+
+      <div className="relative mx-3 overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
+        <canvas ref={canvasRef} className="block h-[58dvh] w-full object-contain" />
+        {flash && <div className="pointer-events-none absolute inset-0 bg-white/80" />}
+        {recording && <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-xs"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />REC {mmss}</div>}
+        {!live && !error && (
+          <button onClick={() => startCamera(facing)} className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-orange-500 px-5 py-2 text-sm font-semibold text-black shadow-lg active:scale-95">Start camera</button>
+        )}
+        {error && (
+          <div className="absolute inset-x-3 bottom-3 rounded-xl bg-black/80 p-3 text-center text-xs text-amber-200">
+            {error}
+            <div className="mt-2 flex justify-center gap-2">
+              <button onClick={() => startCamera(facing)} className="rounded-full bg-orange-500 px-3 py-1 font-semibold text-black">Try again</button>
+              <label className="cursor-pointer rounded-full bg-neutral-700 px-3 py-1 text-neutral-100">Import photo<input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
+            </div>
+          </div>
+        )}
         {!minimal && (
           <div className="absolute right-2 top-2 flex flex-col gap-2 text-xs">
-            <button className="rounded bg-black/60 px-2 py-1" onClick={() => toggleCamera(mirror ? "environment" : "user")}>{live ? "Flip" : "Camera"}</button>
-            <label className="cursor-pointer rounded bg-black/60 px-2 py-1">Import<input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
-            <button className="rounded bg-black/60 px-2 py-1" onClick={() => setLcd(lcd === "off" ? "shoot" : lcd === "shoot" ? "play" : "off")}>LCD: {lcd}</button>
+            <button className="rounded-full bg-black/60 px-3 py-1.5 backdrop-blur" onClick={() => startCamera(facing === "user" ? "environment" : "user")}>{live ? "Flip" : "Camera"}</button>
+            <label className="cursor-pointer rounded-full bg-black/60 px-3 py-1.5 backdrop-blur">Import<input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
+            <button className="rounded-full bg-black/60 px-3 py-1.5 backdrop-blur" onClick={() => setLcd(lcd === "off" ? "shoot" : lcd === "shoot" ? "play" : "off")}>LCD {lcd}</button>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-center gap-6 py-3">
-        <button className="text-xs underline" onClick={() => setMinimal(!minimal)}>{minimal ? "Show UI" : "Minimal"}</button>
-        <button aria-label="Shutter" onClick={shutter} className="h-16 w-16 rounded-full border-4 border-white bg-orange-500 active:scale-95" />
-        <input aria-label="Intensity" type="range" min={0} max={1} step={0.01} value={intensity} onChange={(e) => setIntensity(+e.target.value)} className="w-24" />
+      <div className="flex items-center justify-between px-6 py-3">
+        <div className="flex w-16 justify-start">
+          {shots[0] && (shots[0].kind === "photo"
+            ? <a href={shots[0].url} download={`pixi.${shots[0].ext}`}><img src={shots[0].url} alt="Last shot" className="h-12 w-12 rounded-lg object-cover ring-1 ring-white/20" /></a>
+            : <a href={shots[0].url} download={`pixi.${shots[0].ext}`}><video src={shots[0].url} muted className="h-12 w-12 rounded-lg object-cover ring-1 ring-white/20" /></a>)}
+        </div>
+        <button aria-label={mode === "photo" ? "Take photo" : recording ? "Stop recording" : "Start recording"} onClick={onShutter}
+          className={`flex h-[72px] w-[72px] items-center justify-center rounded-full border-4 border-white transition active:scale-95 ${mode === "video" ? "bg-neutral-900" : "bg-orange-500"}`}>
+          {mode === "video" && <span className={`block bg-red-500 transition-all ${recording ? "h-6 w-6 rounded-md" : "h-11 w-11 rounded-full"}`} />}
+        </button>
+        <div className="flex w-16 justify-end">
+          <div className="flex overflow-hidden rounded-full bg-neutral-800 text-[11px]">
+            {(["photo", "video"] as Mode[]).map((m) => (
+              <button key={m} disabled={recording} onClick={() => setMode(m)} className={`px-2.5 py-1.5 ${mode === m ? "bg-white text-black" : "text-neutral-300"}`}>{m === "photo" ? "Pic" : "Vid"}</button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {!minimal && (
-        <section className="space-y-3 pb-4">
-          <div className="flex gap-2 overflow-x-auto px-3">
-            {EFFECTS.map((e) => (
-              <button key={e.id} onClick={() => setEffects((s) => { const n = new Set(s); n.has(e.id) ? n.delete(e.id) : n.add(e.id); return n; })}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs ${effects.has(e.id) ? "bg-orange-500 text-black" : "bg-neutral-800"}`}>{e.label}</button>
-            ))}
+        <section className="space-y-4 pb-8">
+          <label className="mx-4 flex items-center gap-3 text-xs text-neutral-400">
+            Strength
+            <input aria-label="Intensity" type="range" min={0} max={1} step={0.01} value={intensity} onChange={(e) => setIntensity(+e.target.value)} className="flex-1 accent-orange-500" />
+            <span className="w-8 text-right tabular-nums">{Math.round(intensity * 100)}</span>
+          </label>
+
+          <div>
+            <h2 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Timestamp</h2>
+            <div className="flex gap-2 overflow-x-auto px-4 pb-1">
+              {STAMPS.map((s) => (
+                <button key={s.id} onClick={() => setStamp(s.id)} className={chip(stamp === s.id)} title={s.sample}>{s.label}</button>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-2 overflow-x-auto px-3">
-            {["All", ...BRANDS].map((b) => (
-              <button key={b} onClick={() => setBrand(b)} className={`shrink-0 text-xs ${brand === b ? "font-semibold text-orange-400 underline" : "text-neutral-400"}`}>{b}</button>
-            ))}
+
+          <div>
+            <h2 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Effects</h2>
+            <div className="flex gap-2 overflow-x-auto px-4 pb-1">
+              {EFFECTS.map((e) => (
+                <button key={e.id} onClick={() => setEffects((s) => { const n = new Set(s); n.has(e.id) ? n.delete(e.id) : n.add(e.id); return n; })} className={chip(effects.has(e.id))}>{e.label}</button>
+              ))}
+            </div>
           </div>
+
+          <div>
+            <h2 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Makers</h2>
+            <div className="flex gap-4 overflow-x-auto px-4 pb-1">
+              {["All", ...BRANDS].map((b) => (
+                <button key={b} onClick={() => setBrand(b)} className={`shrink-0 text-sm ${brand === b ? "font-semibold text-orange-400" : "text-neutral-400"}`}>{b}</button>
+              ))}
+            </div>
+          </div>
+
           {rows.map(({ row, items }) => (
             <div key={row}>
-              <h2 className="px-3 pb-1 text-xs uppercase tracking-wider text-neutral-400">{row}</h2>
-              <div className="flex gap-2 overflow-x-auto px-3">
+              <h2 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">{row}</h2>
+              <div className="flex gap-3 overflow-x-auto px-4 pb-1">
                 {items.map((c) => (
-                  <button key={c.preset.id} onClick={() => setCamId(c.preset.id)} className="w-20 shrink-0 text-center" title={c.preset.blurb}>
-                    <div className="h-16 rounded-lg bg-neutral-800/80"><CameraIcon body={c.body} color={c.color} selected={c.preset.id === camId} /></div>
-                    <div className="truncate text-[10px] text-neutral-300">{c.brand} {c.model}</div>
-                    <div className="truncate text-[9px] text-neutral-500">{c.preset.name}</div>
+                  <button key={c.preset.id} onClick={() => setCamId(c.preset.id)} className="w-24 shrink-0 text-center" title={c.preset.blurb}>
+                    <div className={`h-[72px] rounded-xl bg-neutral-800/80 p-1 ring-1 transition ${c.preset.id === camId ? "ring-orange-500" : "ring-white/5"}`}>
+                      <CameraIcon body={c.body} color={c.color} />
+                    </div>
+                    <div className="mt-1.5 truncate text-[11px] font-medium text-neutral-200">{c.preset.name}</div>
+                    <div className="truncate text-[10px] text-neutral-500">{c.brand} {c.model}</div>
                   </button>
                 ))}
               </div>
             </div>
           ))}
+
+          <p className="px-4 text-xs text-neutral-400">{cam.preset.blurb}</p>
+
           {shots.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto px-3">
-              {shots.map((u) => <a key={u} href={u} download="retro-cam.jpg"><img src={u} alt="" className="h-14 w-14 rounded object-cover" /></a>)}
+            <div>
+              <h2 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Saved (tap to download)</h2>
+              <div className="flex gap-2 overflow-x-auto px-4">
+                {shots.map((s) => (
+                  <a key={s.url} href={s.url} download={`pixi.${s.ext}`} className="shrink-0">
+                    {s.kind === "photo" ? <img src={s.url} alt="" className="h-16 w-16 rounded-lg object-cover" /> : <video src={s.url} muted className="h-16 w-16 rounded-lg object-cover" />}
+                  </a>
+                ))}
+              </div>
             </div>
           )}
         </section>

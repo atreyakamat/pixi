@@ -34,7 +34,7 @@ export const dateStamp = [
     blurb: "Night blur with a vertical yellow dot-matrix stamp.",
     layers: [
       L("blur", { radius: 6, angle: 12, mode: 1 }),
-      L("grade", { exposure: -0.1, contrast: 0.1, saturation: -0.1, temperature: 0.2, tint: 0.12, fade: 0.12 }),
+      L("grade", { exposure: -0.3, contrast: 0.3, saturation: -0.1, temperature: -0.25, tint: 0.05, shadows: 0.1 }),
       L("splitTone", { shadowHue: 110, shadowAmt: 0.4, highHue: 40, highAmt: 0.4 }),
       L("bloom", { threshold: 0.6, intensity: 0.8, radius: 20, warmth: 0.4 }),
       L("vignette", { amount: 0.35 }),
@@ -49,7 +49,7 @@ export const dateStamp = [
     family: "Date Stamp",
     blurb: "Cheap phone-cam look with a bold white date and time.",
     layers: [
-      L("grade", { exposure: 0.05, contrast: 0.15, saturation: 0.2, temperature: 0.1 }),
+      L("grade", { exposure: 0.0, contrast: 0.22, saturation: 0.0, temperature: -0.04, tint: -0.22 }),
       L("diffuse", { radius: 6, amount: 0.15 }),
       L("lofi", { pixel: 1.5, sharpen: 0.3, blocks: 0.25, noise: 0.25, chromaNoise: 0.2 }),
       L("vignette", { amount: 0.2 }),
@@ -65,7 +65,7 @@ export const dateStamp = [
     family: "Date Stamp",
     blurb: "Overexposed, soft and low-res with a tiny white stamp.",
     layers: [
-      L("grade", { exposure: 0.35, contrast: -0.05, saturation: 0.1, temperature: 0.1, fade: 0.15 }),
+      L("grade", { exposure: -0.05, contrast: 0.32, saturation: 0.45, temperature: -0.1, tint: -0.05 }),
       L("bloom", { threshold: 0.5, intensity: 1.0, radius: 24 }),
       L("diffuse", { radius: 12, amount: 0.3 }),
       L("lofi", { pixel: 1.8, noise: 0.3, chromaNoise: 0.25, blocks: 0.3, sharpen: 0.2 }),
@@ -79,7 +79,7 @@ export const dateStamp = [
     family: "Date Stamp",
     blurb: "Washed, glowing 2012 phone photo with a yellow side stamp.",
     layers: [
-      L("grade", { exposure: 0.4, contrast: -0.1, saturation: 0.1, temperature: 0.35, fade: 0.2 }),
+      L("grade", { exposure: 0.0, contrast: 0.18, saturation: 0.2, temperature: -0.3, tint: 0.05 }),
       L("diffuse", { radius: 30, amount: 0.5 }),
       L("bloom", { threshold: 0.4, intensity: 1.0, radius: 36, warmth: 0.5 }),
       L("blur", { radius: 5, mode: 0 }),
@@ -300,7 +300,7 @@ export const buttonPhone = [
     layers: [
       L("lofi", { pixel: 2.5, levels: 0.1, noise: 0.3, chromaNoise: 0.35, blocks: 0.5, sharpen: 0.7, bayer: 0.3 }),
       L("diffuse", { radius: 6, amount: 0.25 }),
-      L("grade", { exposure: 0.05, contrast: 0.2, saturation: 0.15, temperature: -0.05, tint: 0.05 }),
+      L("grade", { exposure: 0.0, contrast: 0.38, saturation: 0.5, temperature: 0.12, tint: -0.12 }),
       L("bloom", { threshold: 0.6, intensity: 0.6, radius: 16 }),
       L("chromatic", { amount: 0.25 }),
       L("vignette", { amount: 0.3, softness: 0.5 }),
@@ -313,7 +313,7 @@ export const buttonPhone = [
     family: "Button Phone",
     blurb: "Low light on a tiny sensor: heavy colour noise and banding.",
     layers: [
-      L("grade", { exposure: 0.25, contrast: 0.1, saturation: -0.2, temperature: -0.15, tint: 0.1, shadows: 0.2 }),
+      L("grade", { exposure: -0.4, contrast: 0.4, saturation: -0.15, temperature: -0.3, tint: 0.2, shadows: 0.3 }),
       L("lofi", { pixel: 3, levels: 0.35, noise: 0.7, chromaNoise: 0.7, blocks: 0.5, sharpen: 0.3, bayer: 0.5 }),
       L("bloom", { threshold: 0.45, intensity: 1.0, radius: 22, warmth: -0.1 }),
       L("vignette", { amount: 0.45 }),

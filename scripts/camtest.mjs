@@ -1,0 +1,24 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"] });
+const p = await b.newPage(); await p.setViewport({ width: 420, height: 950 });
+const errs=[]; p.on("pageerror", e=>errs.push(String(e)));
+await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" });
+await new Promise(r=>setTimeout(r,2500));
+const clickText = async (t) => { const h = await p.evaluateHandle((t)=>[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith(t)),t); await h.asElement().click(); await new Promise(r=>setTimeout(r,900)); };
+await clickText("Start camera");
+await new Promise(r=>setTimeout(r,1500));
+const live = await p.evaluate(()=>({ secure: window.isSecureContext, hasVideo: !!document.querySelector("video"), vw: document.querySelector("video")?.videoWidth, flipBtn: [...document.querySelectorAll("button")].some(b=>b.textContent.trim()==="Flip") }));
+console.log("camera:", JSON.stringify(live));
+await clickText("Skate").catch(()=>{});
+await p.screenshot({ path: "/tmp/cam1.png" });
+// video mode record 2s
+await clickText("Vid");
+await p.click('button[aria-label="Start recording"]'); await new Promise(r=>setTimeout(r,2500));
+await p.screenshot({ path: "/tmp/cam2.png" });
+await p.click('button[aria-label="Stop recording"]'); await new Promise(r=>setTimeout(r,1500));
+const vids = await p.evaluate(async ()=>{ const v=document.querySelectorAll("a[download] video"); const out=[]; for (const e of v){ const r=await fetch(e.src); out.push((await r.blob()).size);} return out; });
+console.log("video blob sizes:", JSON.stringify(vids));
+await clickText("Pic"); await p.click('button[aria-label="Take photo"]'); await new Promise(r=>setTimeout(r,1500));
+const photos = await p.evaluate(()=>document.querySelectorAll("a[download] img").length);
+console.log("photos:", photos, "errors:", JSON.stringify(errs));
+await b.close();
