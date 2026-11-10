@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RetroRenderer, type LcdMode } from "@/engine/renderer";
-import { CAMERAS, EFFECTS, withEffects, type EffectId } from "@/ui/cameras";
+import { BRANDS, CAMERAS, EFFECTS, withEffects, type EffectId } from "@/ui/cameras";
 import { CameraIcon } from "@/ui/CameraIcon";
 
 function sampleScene(): HTMLCanvasElement {
@@ -27,6 +27,7 @@ export default function Home() {
   const srcRef = useRef<{ el: TexImageSource; w: number; h: number } | null>(null);
   const [camId, setCamId] = useState(CAMERAS[0].preset.id);
   const [effects, setEffects] = useState<Set<EffectId>>(new Set());
+  const [brand, setBrand] = useState<string>("All");
   const [minimal, setMinimal] = useState(false);
   const [lcd, setLcd] = useState<LcdMode>("off");
   const [intensity, setIntensity] = useState(1);
@@ -87,11 +88,11 @@ export default function Home() {
     setShots((s) => [URL.createObjectURL(blob), ...s].slice(0, 12));
   };
 
-  const rows = (["Digicam", "Special"] as const).map((row) => ({ row, items: CAMERAS.filter((c) => c.row === row) }));
+  const rows = (["Digicam", "Special"] as const).map((row) => ({ row, items: CAMERAS.filter((c) => c.row === row && (brand === "All" || c.brand === brand)) })).filter((r) => r.items.length);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-neutral-950 text-neutral-100">
-      <div className="relative flex-1 bg-black">
+    <main className="mx-auto flex min-h-dvh w-full max-w-md min-w-0 flex-col overflow-x-hidden bg-neutral-950 text-neutral-100">
+      <div className="relative w-full flex-1 overflow-hidden bg-black">
         <canvas ref={canvasRef} className="block h-[62dvh] w-full object-contain" />
         {error && <p className="absolute inset-x-0 top-2 text-center text-xs text-amber-300">{error}</p>}
         {!minimal && (
@@ -117,6 +118,11 @@ export default function Home() {
                 className={`shrink-0 rounded-full px-3 py-1 text-xs ${effects.has(e.id) ? "bg-orange-500 text-black" : "bg-neutral-800"}`}>{e.label}</button>
             ))}
           </div>
+          <div className="flex gap-2 overflow-x-auto px-3">
+            {["All", ...BRANDS].map((b) => (
+              <button key={b} onClick={() => setBrand(b)} className={`shrink-0 text-xs ${brand === b ? "font-semibold text-orange-400 underline" : "text-neutral-400"}`}>{b}</button>
+            ))}
+          </div>
           {rows.map(({ row, items }) => (
             <div key={row}>
               <h2 className="px-3 pb-1 text-xs uppercase tracking-wider text-neutral-400">{row}</h2>
@@ -124,7 +130,7 @@ export default function Home() {
                 {items.map((c) => (
                   <button key={c.preset.id} onClick={() => setCamId(c.preset.id)} className="w-20 shrink-0 text-center" title={c.preset.blurb}>
                     <div className="h-16 rounded-lg bg-neutral-800/80"><CameraIcon body={c.body} color={c.color} selected={c.preset.id === camId} /></div>
-                    <div className="truncate text-[10px] text-neutral-300">{c.model}</div>
+                    <div className="truncate text-[10px] text-neutral-300">{c.brand} {c.model}</div>
                     <div className="truncate text-[9px] text-neutral-500">{c.preset.name}</div>
                   </button>
                 ))}

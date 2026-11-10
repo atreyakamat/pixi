@@ -24,6 +24,9 @@ export function CameraIcon({ body, color, selected }: { body: Body; color: strin
     case "phone":
       shape = (<><rect x="26" y="6" width="28" height="60" rx="6" fill={color} /><rect x="30" y="12" width="20" height="16" rx="2" fill={dark} /><g fill={dark} opacity=".55">{[0, 1, 2].map((r) => [0, 1, 2].map((c) => <circle key={`${r}${c}`} cx={33 + c * 7} cy={38 + r * 8} r="2.3" />))}</g></>);
       break;
+    case "flip":
+      shape = (<><rect x="27" y="4" width="26" height="30" rx="5" fill={color} transform="rotate(-8 40 34)" /><rect x="31" y="9" width="18" height="12" rx="2" fill={dark} transform="rotate(-8 40 34)" /><rect x="27" y="36" width="26" height="30" rx="5" fill={color} opacity=".9" /><circle cx="33" cy="42" r="2.2" fill={dark} opacity=".6" /><g fill={dark} opacity=".5">{[0, 1, 2].map((r) => [0, 1, 2].map((c) => <circle key={`${r}${c}`} cx={33 + c * 7} cy={48 + r * 5.5} r="1.8" />))}</g></>);
+      break;
     case "slider":
       shape = (<><rect x="26" y="4" width="28" height="30" rx="5" fill={color} /><rect x="26" y="32" width="28" height="34" rx="5" fill={color} opacity=".85" /><rect x="30" y="9" width="20" height="14" rx="2" fill={dark} /></>);
       break;

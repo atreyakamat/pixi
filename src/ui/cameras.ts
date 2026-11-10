@@ -1,30 +1,49 @@
 import type { LayerSpec, OverlaySpec, Preset } from "@/engine/types";
 import { PRESETS } from "@/presets";
 
-export type Body = "compact" | "slab" | "bridge" | "toy" | "phone" | "slider" | "camcorder" | "instant";
-export interface CameraDef { preset: Preset; body: Body; color: string; model: string; row: "Digicam" | "Special" }
+export type Body = "flip" | "compact" | "slab" | "bridge" | "toy" | "phone" | "slider" | "camcorder" | "instant";
+export interface CameraDef { brand: string; preset: Preset; body: Body; color: string; model: string; row: "Digicam" | "Special" }
 
 const COLORS = ["#c9ccd1", "#2b2d33", "#d9a441", "#b5474a", "#5b8fb9", "#8fae7e", "#e8e0d0", "#8a6bb0"];
 const hash = (s: string) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
 const FAMILY_BODY: Record<string, Body[]> = {
   "Button Phone": ["phone", "slider"],
+  "Flip Phone": ["flip"],
   "VHS & Camcorder": ["camcorder"],
   "Instant Print": ["instant"],
   "Toy Lens": ["toy"],
   "35mm Scan": ["bridge", "slab"],
 };
-const DIGI = new Set(["Date Stamp", "Blown-out", "Night Blur", "Flash & Compact", "Golden Hour", "Button Phone"]);
+const DIGI = new Set(["Date Stamp", "Blown-out", "Night Blur", "Flash & Compact", "Golden Hour", "Button Phone", "Flip Phone"]);
+
+// Fictional makers (no real trademarks). Each family belongs to one maker, like a real lineup.
+export const BRAND_OF: Record<string, { brand: string; prefix: string }> = {
+  "Date Stamp": { brand: "Kestrel", prefix: "KD" },
+  "Flash & Compact": { brand: "Kestrel", prefix: "KF" },
+  "Blown-out": { brand: "Lumio", prefix: "LB" },
+  "Night Blur": { brand: "Lumio", prefix: "LN" },
+  "Golden Hour": { brand: "Lumio", prefix: "LG" },
+  "35mm Scan": { brand: "Halcyon", prefix: "HX" },
+  "Instant Print": { brand: "Solstice", prefix: "SI" },
+  "VHS & Camcorder": { brand: "Orbis", prefix: "OV" },
+  "Toy Lens": { brand: "Tamarind", prefix: "TT" },
+  "Button Phone": { brand: "Brickwell", prefix: "BW" },
+  "Flip Phone": { brand: "Zephyr", prefix: "ZF" },
+  Creative: { brand: "Vanta", prefix: "VX" },
+};
+export const BRANDS = Array.from(new Set(Object.values(BRAND_OF).map((b) => b.brand)));
 
 export const CAMERAS: CameraDef[] = PRESETS.map((p) => {
   const h = hash(p.id);
   const bodies = FAMILY_BODY[p.family] ?? ["compact", "slab"];
-  const prefix = ["CCD", "DX", "PX", "LC", "MV"][h % 5];
+  const b = BRAND_OF[p.family] ?? { brand: "Vanta", prefix: "VX" };
   return {
+    brand: b.brand,
     preset: p,
     body: bodies[h % bodies.length],
-    color: COLORS[(h >> 3) % COLORS.length],
-    model: `${prefix}-${10 + ((h >> 6) % 90)}`,
+    color: COLORS[(h >>> 3) % COLORS.length],
+    model: `${b.prefix}-${10 + ((h >>> 6) % 90)}`,
     row: DIGI.has(p.family) ? "Digicam" : "Special",
   };
 });

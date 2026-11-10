@@ -2,6 +2,7 @@ import type { Preset } from "@/engine/types";
 import { blownOut, buttonPhone, dateStamp, flashCompact, nightBlur } from "./digicam";
 import { creative, instant, scan35, toyLens, vhs } from "./film";
 import { goldenHour } from "./golden";
+import { candyBar, flipPhone } from "./phones";
 
 export const PRESETS: Preset[] = [
   ...goldenHour,
@@ -14,6 +15,8 @@ export const PRESETS: Preset[] = [
   ...toyLens,
   ...flashCompact,
   ...buttonPhone,
+  ...candyBar,
+  ...flipPhone,
   ...creative,
 ];
 

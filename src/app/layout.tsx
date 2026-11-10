@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Retro Cam",
+  title: "Pixi",
   description: "Retro camera looks, free and on-device.",
 };
 
