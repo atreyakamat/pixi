@@ -1,0 +1,2 @@
+# pixi
+illegal camera
