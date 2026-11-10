@@ -3,6 +3,7 @@ import { blownOut, buttonPhone, dateStamp, flashCompact, nightBlur } from "./dig
 import { creative, instant, scan35, toyLens, vhs } from "./film";
 import { goldenHour } from "./golden";
 import { candyBar, flipPhone } from "./phones";
+import { crtTv, disposable, fisheye, security, super8, webcam, y2k } from "./more";
 
 export const PRESETS: Preset[] = [
   ...goldenHour,
@@ -17,6 +18,13 @@ export const PRESETS: Preset[] = [
   ...buttonPhone,
   ...candyBar,
   ...flipPhone,
+  ...fisheye,
+  ...disposable,
+  ...crtTv,
+  ...security,
+  ...webcam,
+  ...super8,
+  ...y2k,
   ...creative,
 ];
 
