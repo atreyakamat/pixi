@@ -1,0 +1,13 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader"] });
+const p = await b.newPage();
+await p.setViewport({ width: 420, height: 900 });
+const errs = []; p.on("console", m => { if (m.type()==="error") errs.push(m.text()); }); p.on("pageerror", e => errs.push(String(e)));
+await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" });
+await new Promise(r => setTimeout(r, 4000));
+await p.screenshot({ path: "/tmp/shot1.png" });
+await p.click("button[title]:nth-of-type(3)").catch(()=>{});
+await new Promise(r => setTimeout(r, 800));
+await p.screenshot({ path: "/tmp/shot2.png" });
+console.log("errors:", JSON.stringify(errs));
+await b.close();
