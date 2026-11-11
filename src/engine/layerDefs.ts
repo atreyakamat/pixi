@@ -60,6 +60,60 @@ vec2 sp(int i, int n){ float a = float(i)*2.39996; float r = sqrt((float(i)+0.5)
 `;
 
 export const LAYER_DEFS: Record<GpuLayerKind, LayerDef> = {
+  portraitBlur: {
+    label: "Portrait blur",
+    params: [
+      p("fx", 0.5, 0, 1, 0.01, "Focus X"),
+      p("fy", 0.45, 0, 1, 0.01, "Focus Y"),
+      p("radius", 0.25, 0.05, 0.9, 0.01, "Sharp zone"),
+      p("feather", 0.3, 0.02, 0.8, 0.01, "Feather"),
+      p("strength", 0.8, 0, 1, 0.01, "Blur"),
+      p("bokeh", 0.5, 0, 1, 0.01, "Bokeh glow"),
+    ],
+    body: /* glsl */ `
+      vec2 asp = vec2(u_res.x/u_res.y, 1.0);
+      float d = length((uv - vec2(p_fx, p_fy))*asp*vec2(1.0, 1.25));
+      float m = smoothstep(p_radius, p_radius + p_feather, d);
+      float rad = m * p_strength * 30.0 * u_scale;
+      if (rad > 0.4) {
+        vec2 px = 1.0/u_res;
+        vec3 acc = vec3(0.0); float ws = 0.0;
+        for (int i = 0; i < 40; i++) {
+          float fi = float(i);
+          float r = sqrt((fi + 0.5)/40.0);
+          float a = fi*2.39996;
+          vec3 s = texture(u_tex, uv + vec2(cos(a), sin(a))*r*rad*px).rgb;
+          float w = 1.0 + p_bokeh*pow(luma(s), 4.0)*8.0;
+          acc += s*w; ws += w;
+        }
+        c = mix(c, acc/ws, smoothstep(0.4, 1.5, rad));
+      }
+    `,
+  },
+  denoise: {
+    label: "Night / denoise",
+    params: [
+      p("strength", 0.6, 0, 1, 0.01, "Denoise"),
+      p("lift", 0.5, 0, 1, 0.01, "Shadow lift"),
+      p("gain", 0.4, -1, 2, 0.01, "Brightness (EV)"),
+    ],
+    body: /* glsl */ `
+      vec2 px = (1.0/u_res)*(1.0 + p_strength*1.6);
+      vec3 acc = c; float ws = 1.0;
+      for (int i = 0; i < 8; i++) {
+        float a = float(i)*0.785398;
+        vec3 s = texture(u_tex, uv + vec2(cos(a), sin(a))*px).rgb;
+        vec3 dd = s - c;
+        float w = exp(-dot(dd, dd)*40.0/(0.2 + p_strength));
+        acc += s*w; ws += w;
+      }
+      c = mix(c, acc/ws, p_strength);
+      c *= exp2(p_gain);
+      float L = luma(c);
+      c += p_lift*0.25*(1.0 - smoothstep(0.0, 0.5, L))*(c + 0.05);
+      c = pow(max(c, vec3(0.0)), vec3(1.0 - p_lift*0.25));
+    `,
+  },
   grade: {
     label: "Color grade",
     params: [

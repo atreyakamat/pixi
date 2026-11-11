@@ -1,0 +1,13 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"] });
+const p = await b.newPage(); await p.setViewport({ width: 420, height: 1000 });
+await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" });
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); await sleep(2500);
+const click = (t)=>p.evaluate((t)=>{ const el=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith(t)); el?.click(); return !!el; },t);
+await click("Start camera"); await sleep(1500);
+console.log("audio gum:", await p.evaluate(async()=>{ const t=performance.now(); try{ const s=await Promise.race([navigator.mediaDevices.getUserMedia({audio:true}), new Promise((_,j)=>setTimeout(()=>j("timeout 5s"),5000))]); return "ok "+Math.round(performance.now()-t)+"ms"; }catch(e){ return "fail "+e; } }));
+console.log("mr types:", await p.evaluate(()=>["video/mp4;codecs=avc1","video/webm;codecs=vp9","video/webm"].map(m=>m+":"+MediaRecorder.isTypeSupported(m))));
+await click("VIDEO"); await sleep(300);
+await p.evaluate(()=>document.querySelector('button[aria-label="Start recording"]').click()); await sleep(3000);
+console.log("after:", await p.evaluate(()=>[...document.querySelectorAll("button[aria-label]")].map(b=>b.getAttribute("aria-label"))));
+await b.close();

@@ -1,0 +1,13 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"] });
+const p = await b.newPage(); await p.setViewport({ width: 420, height: 1000 });
+const errs=[]; p.on("pageerror", e=>errs.push("PE "+e)); p.on("console", m=>errs.push(m.type()+": "+m.text()));
+await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" });
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); await sleep(2500);
+const click = (t)=>p.evaluate((t)=>{ const el=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith(t)); el?.click(); return !!el; },t);
+await click("Start camera"); await sleep(1500);
+await click("VIDEO"); await sleep(500);
+console.log("labels:", await p.evaluate(()=>[...document.querySelectorAll("button[aria-label]")].map(b=>b.getAttribute("aria-label"))));
+await p.evaluate(()=>{window.addEventListener("unhandledrejection",e=>console.log("UNHANDLED "+e.reason));}); await p.click(`button[aria-label="Start recording"]`); await sleep(1500);
+console.log("after:", await p.evaluate(()=>[...document.querySelectorAll("button[aria-label]")].map(b=>b.getAttribute("aria-label"))), await p.evaluate(()=>document.body.textContent.match(/REC \d+:\d+/)?.[0]));
+console.log(errs.filter(e=>!e.includes("GL Driver")).join("\n")); await b.close();

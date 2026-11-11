@@ -41,6 +41,10 @@ export interface RenderOptions {
   /** Long side of the output in pixels. */
   maxSide: number;
   date?: Date;
+  /** Overrides the preset aspect (width / height). */
+  aspect?: number;
+  /** Digital zoom, 1 = none. */
+  zoom?: number;
 }
 
 interface Target {
@@ -229,7 +233,7 @@ export class RetroRenderer {
   render(opts: RenderOptions, time: number) {
     if (!this.hasSource) return;
     const gl = this.gl;
-    const aspect = opts.preset?.aspect ?? 3 / 4;
+    const aspect = opts.aspect ?? opts.preset?.aspect ?? 3 / 4;
     const { w, h } = RetroRenderer.outputSize(aspect, opts.maxSide);
     this.ensureTargets(w, h);
     gl.viewport(0, 0, w, h);
@@ -237,7 +241,9 @@ export class RetroRenderer {
 
     // 1) crop to target aspect
     const srcAspect = this.srcW / this.srcH;
-    const crop: [number, number] = srcAspect > aspect ? [aspect / srcAspect, 1] : [1, srcAspect / aspect];
+    const z = Math.max(1, opts.zoom ?? 1);
+    const base: [number, number] = srcAspect > aspect ? [aspect / srcAspect, 1] : [1, srcAspect / aspect];
+    const crop: [number, number] = [base[0] / z, base[1] / z];
     const cp = this.program("crop", CROP_FRAG);
     gl.useProgram(cp.program);
     this.bindTex(0, this.srcTex);
