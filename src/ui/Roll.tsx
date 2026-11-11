@@ -167,16 +167,16 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
                 : full && <video src={full} controls autoPlay loop playsInline className="h-full w-full object-contain" />}
             </motion.div>
 
-            <div className="flex items-center justify-center gap-4 px-6 pb-5 pt-4 safe-b">
-              <motion.button whileTap={press} transition={snappy} onClick={() => onSave(cur)} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white py-3.5 text-[0.9375rem] font-semibold text-black">
-                <I n={cur.exported ? "check" : "save"} className="h-[18px] w-[18px]" /> {cur.exported ? "Saved to phone" : "Save to phone"}
+            <div className="flex items-center justify-center gap-2.5 px-4 pb-5 pt-4 safe-b">
+              <motion.button whileTap={press} transition={snappy} onClick={() => onSave(cur)} aria-label={cur.exported ? "Saved to your phone. Save again" : "Save to your phone"} className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-white px-3 py-3.5 text-[0.9375rem] font-semibold text-black">
+                <I n={cur.exported ? "check" : "save"} className="h-[18px] w-[18px] shrink-0" /> <span className="truncate">{cur.exported ? "Saved" : "Save"}</span>
               </motion.button>
               {onClip && cur.kind === "photo" && (
-                <motion.button whileTap={press} transition={snappy} aria-label="Make a develop clip" title="Develop clip" onClick={() => onClip(cur)} className="flex h-[50px] w-[50px] items-center justify-center rounded-2xl bg-white/[0.09]"><I n="film" className="h-[19px] w-[19px]" /></motion.button>
+                <motion.button whileTap={press} transition={snappy} aria-label="Make a develop clip" title="Develop clip" onClick={() => onClip(cur)} className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-white/[0.09]"><I n="film" className="h-[19px] w-[19px]" /></motion.button>
               )}
-              <motion.button whileTap={press} transition={snappy} aria-label="Share" onClick={() => onShare(cur)} className="flex h-[50px] w-[50px] items-center justify-center rounded-2xl bg-white/[0.09]"><I n="share" className="h-[19px] w-[19px]" /></motion.button>
+              <motion.button whileTap={press} transition={snappy} aria-label="Share" onClick={() => onShare(cur)} className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-white/[0.09]"><I n="share" className="h-[19px] w-[19px]" /></motion.button>
               <motion.button whileTap={press} transition={snappy} aria-label="Delete" onClick={() => { const next = shots[idx + 1] ?? shots[idx - 1]; onDelete(cur); setOpen(next?.id ?? null); }}
-                className="flex h-[50px] w-[50px] items-center justify-center rounded-2xl bg-white/[0.09] text-[#ff453a]"><I n="trash" className="h-[19px] w-[19px]" /></motion.button>
+                className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-white/[0.09] text-[#ff453a]"><I n="trash" className="h-[19px] w-[19px]" /></motion.button>
             </div>
           </motion.div>
         )}

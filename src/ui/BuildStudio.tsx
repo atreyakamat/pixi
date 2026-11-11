@@ -366,7 +366,7 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, see
           ))}
         </div>
 
-        <div className="h-[186px] overflow-y-auto overscroll-contain pb-2">
+        <div className="h-[11.625rem] max-h-[38dvh] overflow-y-auto overscroll-contain pb-2">
           {tab === "frame" && (
             <div className="flex gap-3 overflow-x-auto px-4 pb-2" style={{ scrollbarWidth: "none" }}>
               {frames.map((t) => (

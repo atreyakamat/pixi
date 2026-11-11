@@ -60,7 +60,9 @@ node scripts/orientation-check.mjs   # every look comes out the right way up
 node scripts/backup-check.mjs        # backup round-trip, junk refused
 node scripts/layout-sheet.mjs        # every layout on one sheet → /tmp/layouts.jpg
 node scripts/clip-check.mjs          # the develop clip encodes
+node scripts/bigtext-check.mjs        # every screen at the largest text size on a small phone
+node scripts/privacy-check.mjs        # privacy page reachable, scrolls, returns
 node scripts/launch-kit.mjs ~/photos # store screenshots + 15 s promo film → docs/launch/
 ```
 
-On a phone: Settings → Performance → Frame meter. See `docs/PERFORMANCE.md` and `docs/LAUNCH.md`.
+On a phone: Settings → Performance → Frame meter. See `docs/PERFORMANCE.md`, `docs/LAUNCH.md` and `docs/RELEASE.md` (signing and Google Play).
