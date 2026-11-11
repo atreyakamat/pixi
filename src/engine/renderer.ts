@@ -330,7 +330,7 @@ export class RetroRenderer {
 
   /** Render at full quality and return an encoded image. */
   async capture(opts: RenderOptions, time: number, type = "image/jpeg", quality = 0.92): Promise<Blob> {
-    this.render({ ...opts, maxSide: Math.max(opts.maxSide, 2048) }, time);
+    this.render({ ...opts, maxSide: opts.preset?.captureSide ?? Math.max(opts.maxSide, 2048) }, time);
     return new Promise((resolve, reject) =>
       this.canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Capture failed"))), type, quality),
     );

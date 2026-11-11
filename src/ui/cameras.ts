@@ -20,8 +20,10 @@ const FAMILY_BODY: Record<string, Body[]> = {
   "Instant Print": ["instant"],
   "Toy Lens": ["toy"],
   "35mm Scan": ["bridge", "slab"],
+  "0.1MP": ["phone"],
 };
-const DIGI = new Set(["Fisheye", "Disposable", "Y2K", "Date Stamp", "Blown-out", "Night Blur", "Flash & Compact", "Golden Hour", "Button Phone", "Flip Phone"]);
+const BODY_BY_ID: Record<string, Body> = { "lr-vga-02": "phone", "lr-flip-03": "flip", "lr-webcam-00": "webcam", "lr-pocket-mono": "toy" };
+const DIGI = new Set(["Fisheye", "Disposable", "Y2K", "Date Stamp", "Blown-out", "Night Blur", "Flash & Compact", "Golden Hour", "Button Phone", "Flip Phone", "0.1MP"]);
 
 // Fictional makers (no real trademarks). Each family belongs to one maker, like a real lineup.
 export const BRAND_OF: Record<string, { brand: string; prefix: string }> = {
@@ -44,6 +46,7 @@ export const BRAND_OF: Record<string, { brand: string; prefix: string }> = {
   Webcam: { brand: "Nimbus", prefix: "NW" },
   "Super 8": { brand: "Halcyon", prefix: "HC" },
   Y2K: { brand: "Kestrel", prefix: "KY" },
+  "0.1MP": { brand: "Nibble", prefix: "NB" },
 };
 export const BRANDS = Array.from(new Set(Object.values(BRAND_OF).map((b) => b.brand)));
 
@@ -54,7 +57,7 @@ export const CAMERAS: CameraDef[] = PRESETS.map((p) => {
   return {
     brand: b.brand,
     preset: p,
-    body: bodies[h % bodies.length],
+    body: BODY_BY_ID[p.id] ?? bodies[h % bodies.length],
     color: COLORS[(h >>> 3) % COLORS.length],
     model: `${b.prefix}-${10 + ((h >>> 6) % 90)}`,
     row: DIGI.has(p.family) ? "Digicam" : "Special",

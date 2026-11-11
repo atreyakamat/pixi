@@ -20,6 +20,7 @@ import { CameraCarousel } from "@/ui/CameraCarousel";
 import { Sheet } from "@/ui/Sheet";
 import { Nav, type View } from "@/ui/Nav";
 import { Roll } from "@/ui/Roll";
+import { composeBooth, type BoothLayout } from "@/ui/booth";
 import { FILMS } from "@/presets/films";
 import { useDraft } from "@/ui/useDraft";
 import { loadFavs, loadLooks, lookToPreset, newId, persistFavs, persistLooks, presetToLook, type SavedLook } from "@/ui/store";
@@ -118,6 +119,9 @@ export default function Home() {
   const [shelf, setShelf] = useState(false);
   const [shelfTab, setShelfTab] = useState<"cams" | "film" | "style">("cams");
   const [proSheet, setProSheet] = useState(false);
+  const [frameId, setFrameId] = useState<"auto" | "none" | "polaroid" | "thin" | "rounded" | "film">("auto");
+  const [boothLayout, setBoothLayout] = useState<BoothLayout>("strip");
+  const [boothStep, setBoothStep] = useState(0);
   const [snap, setSnap] = useState(0);
   const [boot, setBoot] = useState<"splash" | "onboard" | "ready">("splash");
   bootRef.current = boot;
@@ -157,8 +161,10 @@ export default function Home() {
     if (building && dr.draft) return lookToPreset(dr.draft);
     const withFx = withEffects(withFilm(camDef.preset, film), { effects, stamp });
     const moded = applyMode(withFx, mode, { pro, focus, portraitBlur });
-    return { ...moded, overlays: [...(moded.overlays ?? []), ...watermarkOverlays(wmId, camDef, wmText)] };
-  }, [camDef, film, effects, stamp, mode, pro, focus, portraitBlur, wmId, wmText, building, dr.draft]);
+    const base = frameId === "auto" ? (moded.overlays ?? []) : (moded.overlays ?? []).filter((o) => o.kind !== "frame");
+    const frame = frameId === "auto" || frameId === "none" ? [] : [{ kind: "frame" as const, style: frameId, color: frameId === "polaroid" || frameId === "thin" ? "#f4efe6" : "#111111" }];
+    return { ...moded, overlays: [...base, ...frame, ...watermarkOverlays(wmId, camDef, wmText)] };
+  }, [camDef, film, effects, stamp, mode, pro, focus, portraitBlur, wmId, wmText, frameId, building, dr.draft]);
 
   const optsRef = useRef({ preset, intensity, mirror: false, lcd, aspect, zoom });
   optsRef.current = { preset, intensity: compare && building ? 0 : intensity, mirror, lcd, aspect, zoom };
@@ -177,12 +183,17 @@ export default function Home() {
       if (s.wmId) setWmId(s.wmId);
       if (typeof s.wmText === "string") setWmText(s.wmText);
       if (s.stamp) setStamp(s.stamp);
+      if (s.frameId) setFrameId(s.frameId);
+      if (s.boothLayout) setBoothLayout(s.boothLayout);
     } catch { /* ignore */ }
     setLooksReady(true);
+    // Returning users already granted access: warm the camera up behind the splash.
+    try { if (localStorage.getItem("pixi:onboarded") === "1") void cam.start("environment"); } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    try { localStorage.setItem("pixi:v2", JSON.stringify({ camId, aspectId, gridId, timerSec, wmId, wmText, stamp, filmId })); } catch { /* ignore */ }
-  }, [camId, aspectId, gridId, timerSec, wmId, wmText, stamp, filmId]);
+    try { localStorage.setItem("pixi:v2", JSON.stringify({ camId, aspectId, gridId, timerSec, wmId, wmText, stamp, filmId, frameId, boothLayout })); } catch { /* ignore */ }
+  }, [camId, aspectId, gridId, timerSec, wmId, wmText, stamp, filmId, frameId, boothLayout]);
   useEffect(() => { if (looksReady) persistLooks(myLooks); }, [myLooks, looksReady]);
   useEffect(() => { if (looksReady) persistFavs(favs); }, [favs, looksReady]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(""), 2600); return () => clearTimeout(t); }, [toast]);
@@ -277,9 +288,8 @@ export default function Home() {
     let done = false;
     try { done = localStorage.getItem("pixi:onboarded") === "1"; } catch { /* private mode */ }
     setBoot(done ? "ready" : "onboard");
-    if (done) void cam.start("environment");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cam.start]);
+  }, []);
   const finishOnboard = () => {
     try { localStorage.setItem("pixi:onboarded", "1"); } catch { /* ignore */ }
     setBoot("ready"); void cam.start("environment");
@@ -342,7 +352,7 @@ export default function Home() {
     let night = null as Awaited<ReturnType<typeof nightSource>>;
     if (mode === "night") { night = await nightSource(); if (night) overrideRef.current = night; }
     try {
-      const blob = await rendererRef.current!.capture({ ...optsRef.current, maxSide: 2048, date: new Date() }, performance.now() / 1000);
+      const blob = await rendererRef.current!.capture({ ...optsRef.current, maxSide: optsRef.current.preset.captureSide ?? 2048, date: new Date() }, performance.now() / 1000);
       addShot(blob, "photo", "jpg");
     } finally {
       overrideRef.current = null; setBusy(""); setFlash(false);
@@ -404,10 +414,26 @@ export default function Home() {
     return true;
   };
 
+  const runBooth = async () => {
+    const frames: ImageBitmap[] = [];
+    try {
+      for (let i = 0; i < 4; i++) {
+        setBoothStep(i + 1);
+        if (!(await runCountdown(i === 0 ? 3 : 2))) return;
+        setSnap((n) => n + 1);
+        frames.push(await createImageBitmap(canvasRef.current!));
+        await sleep(300);
+      }
+      setBusy("Making your strip…");
+      await addShot(await composeBooth(frames, boothLayout, camDef.model), "photo", "jpg");
+    } finally { frames.forEach((f) => f.close()); setBoothStep(0); setBusy(""); }
+  };
+
   const onShutter = async () => {
     if (busy) return;
     if (countdown > 0) { cancelRef.current = true; return; }
     if (recording) { return mode === "timelapse" ? stopTimelapse() : stopVideo(); }
+    if (mode === "booth") return runBooth();
     if (timerSec > 0 && !(await runCountdown(timerSec))) return;
     if (mode === "video") return startVideo();
     if (mode === "timelapse") return startTimelapse();
@@ -545,7 +571,7 @@ export default function Home() {
             {busy && <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 bg-black/60 py-2 text-center text-sm">{busy}</div>}
             <div className="lcd pointer-events-none absolute left-2 top-2 flex items-center gap-2 text-[9px] text-white/80">
               {recording ? <span className="flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[10px]"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{mode === "timelapse" ? `${tlCount} FR` : `REC ${mmss}`}</span>
-                : <span className="rounded-full bg-black/45 px-2 py-1">{MODES.find((m) => m.id === mode)!.label.toUpperCase()} · {aspectLabel === "Auto" ? "AUTO" : aspectLabel}</span>}
+                : <span className="rounded-full bg-black/45 px-2 py-1">{boothStep ? `PHOTO ${boothStep}/4` : `${MODES.find((m) => m.id === mode)!.label.toUpperCase()} · ${aspectLabel === "Auto" ? "AUTO" : aspectLabel}`}</span>}
             </div>
             {mode === "portrait" && !recording && <div className="pointer-events-none absolute left-2 top-9 rounded-full bg-black/50 px-2 py-1 text-[10px]">Tap to set focus</div>}
             {!cam.live && !(error || cam.error) && boot === "ready" && (
@@ -597,10 +623,11 @@ export default function Home() {
             {mode === "portrait" && <label className="flex items-center gap-3 text-[11px] text-neutral-400"><span>Blur</span><input type="range" min={0} max={1} step={0.02} value={portraitBlur} onChange={(e) => setPortraitBlur(+e.target.value)} className="flex-1 accent-orange-500" /></label>}
             {mode === "night" && <p className="text-[11px] text-neutral-500">Combines 8 frames. Hold still for a second.</p>}
             {mode === "timelapse" && <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-400">Every {TL_INTERVALS.map((n) => <button key={n} disabled={recording} onClick={() => setTlInterval(n)} className={chip(tlInterval === n)}>{n}s</button>)}</div>}
+            {mode === "booth" && <div className="flex items-center justify-center gap-2 text-[11px] text-neutral-400">4 photos, one card {([["strip", "Strip"], ["grid", "2×2"]] as const).map(([k, l]) => <button key={k} onClick={() => setBoothLayout(k)} className={chip(boothLayout === k)}>{l}</button>)}</div>}
             {mode === "pro" && <button onClick={() => setProSheet(true)} className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium">Manual controls</button>}
           </div>
 
-          <div className="pt-1"><ModeDial mode={mode} onChange={setMode} disabled={recording || !!busy} /></div>
+          <div className="pt-1"><ModeDial mode={mode} onChange={setMode} disabled={recording || !!busy || boothStep > 0} /></div>
 
           <div className="flex items-center justify-between px-8 pb-3 pt-1">
             <div className="flex w-14 justify-start">
@@ -644,7 +671,7 @@ export default function Home() {
 
       <AnimatePresence>{toast && <motion.div key="toast" role="status" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }} transition={spring} className="fixed inset-x-0 bottom-24 z-[70] mx-auto w-fit rounded-full bg-white px-4 py-2 text-xs font-semibold text-black shadow-lg">{toast}</motion.div>}</AnimatePresence>
 
-      <Nav view={view} disabled={recording || !!busy} onChange={(v) => { if (v === "builder") { if (!dr.draft) openBuilder(); else setView("builder"); } else setView(v); }} />
+      <Nav view={view} disabled={recording || !!busy || boothStep > 0} onChange={(v) => { if (v === "builder") { if (!dr.draft) openBuilder(); else setView("builder"); } else setView(v); }} />
 
       <Sheet open={shelf} onClose={() => setShelf(false)} title="Camera shelf">
         <div className="flex gap-2 px-4 pb-3 pt-1">
@@ -686,8 +713,10 @@ export default function Home() {
             <div><h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Timestamp</h3>
               <div className="flex gap-2 overflow-x-auto px-4 pb-1">{STAMPS.map((s) => <button key={s.id} onClick={() => setStamp(s.id)} className={chip(stamp === s.id)} title={s.sample}>{s.label}</button>)}</div></div>
             <div><h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Effects</h3>
-              <div className="flex gap-2 overflow-x-auto px-4 pb-1">{EFFECTS.map((e) => (
+              <div className="flex gap-2 overflow-x-auto px-4 pb-1">{EFFECTS.filter((e) => e.id !== "frame").map((e) => (
                 <button key={e.id} onClick={() => setEffects((s) => { const n = new Set(s); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); return n; })} className={chip(effects.has(e.id))}>{e.label}</button>))}</div></div>
+            <div><h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Frame</h3>
+              <div className="flex gap-2 overflow-x-auto px-4 pb-1">{([["auto", "Camera default"], ["none", "None"], ["polaroid", "Polaroid"], ["thin", "Thin"], ["rounded", "Rounded"], ["film", "Film strip"]] as const).map(([k, l]) => <button key={k} onClick={() => setFrameId(k)} className={chip(frameId === k)}>{l}</button>)}</div></div>
             <div><h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Watermark</h3>
               <div className="flex gap-2 overflow-x-auto px-4 pb-1">{WATERMARKS.map((w) => <button key={w.id} onClick={() => setWmId(w.id)} className={chip(wmId === w.id)}>{w.label}</button>)}</div>
               {wmId === "custom" && <input value={wmText} onChange={(e) => setWmText(e.target.value)} maxLength={40} placeholder="Your watermark text" className="mx-4 mt-2 w-[calc(100%-2rem)] rounded-lg bg-neutral-800 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-orange-500" />}</div>

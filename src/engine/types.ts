@@ -75,6 +75,8 @@ export interface Preset {
   blurb: string;
   /** Output aspect ratio (width / height). Default 3/4. */
   aspect?: number;
+  /** Long-side pixels for photo capture. Low-res cameras (0.1MP) save at their true size, upscaled in whole pixels. */
+  captureSide?: number;
   layers: LayerSpec[];
   overlays?: OverlaySpec[];
 }
