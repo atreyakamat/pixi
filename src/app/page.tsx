@@ -6,8 +6,8 @@ import { BRANDS, CAMERAS, EFFECTS, STAMPS, cameraFromPreset, withEffects, withFi
 import { Builder } from "@/ui/Builder";
 import { Gallery, type GalleryItem } from "@/ui/Gallery";
 import { FilmCarousel } from "@/ui/FilmCarousel";
-import { isNative, nativeShare } from "@/ui/native";
-import { rollAdd, rollAll, rollDelete } from "@/ui/roll";
+import { isNative, saveMessage, saveToGallery, shareOrSave } from "@/ui/native";
+import { makeThumb, markExported, rollAdd, rollAll, rollDelete } from "@/ui/roll";
 import { ShareSheet } from "@/ui/ShareSheet";
 import { AnimatePresence, motion } from "framer-motion";
 import { I, type IconName } from "@/ui/icons";
@@ -20,6 +20,11 @@ import { CameraCarousel } from "@/ui/CameraCarousel";
 import { Sheet } from "@/ui/Sheet";
 import { Nav, type View } from "@/ui/Nav";
 import { Roll } from "@/ui/Roll";
+import { StripStudio } from "@/ui/StripStudio";
+import { SettingsScreen } from "@/ui/Settings";
+import { ErrorBoundary } from "@/ui/ErrorBoundary";
+import { ext as extOf, useSettings } from "@/ui/settings";
+import { noteUse, topUsed } from "@/ui/recent";
 import { composeBooth, type BoothLayout } from "@/ui/booth";
 import { fade, press, smooth, snappy, tap } from "@/ui/motion";
 import { FILMS } from "@/presets/films";
@@ -33,7 +38,7 @@ import { MODES, PRO_CONTROLS, PRO_DEFAULT, applyMode, type ModeId, type ProState
 import { WATERMARKS, watermarkOverlays, type WatermarkId } from "@/ui/watermarks";
 import { encodeTimelapse } from "@/ui/timelapse";
 
-type Shot = { id: string; url: string; kind: "photo" | "video"; ext: string; blob: Blob; created: number };
+type Shot = { id: string; url: string; kind: "photo" | "video"; ext: string; blob: Blob; created: number; exported?: boolean };
 
 const ASPECTS = [
   { id: "look", label: "Auto", v: 0 },
@@ -126,6 +131,8 @@ export default function Home() {
   const [boothStep, setBoothStep] = useState(0);
   const [snap, setSnap] = useState(0);
   const [boot, setBoot] = useState<"splash" | "onboard" | "ready">("splash");
+  const [stripSeed, setStripSeed] = useState<string[]>([]);
+  const { settings, setSettings } = useSettings();
   bootRef.current = boot;
   sheetRef.current = shelf || proSheet;
   const [lcd, setLcd] = useState<LcdMode>("off");
@@ -316,19 +323,24 @@ export default function Home() {
     setBoot("ready"); void cam.start("environment");
   };
 
-  const addShot = async (blob: Blob, kind: Shot["kind"], ext: string) => {
+  const addShot = async (blob: Blob, kind: Shot["kind"], ext: string): Promise<Shot> => {
     const created = Date.now();
-    const item: Shot = { id: `s${created}${Math.random().toString(36).slice(2, 6)}`, url: URL.createObjectURL(blob), kind, ext, blob, created };
-    setShots((s) => [item, ...s].slice(0, 120));
+    const thumb = kind === "photo" ? await makeThumb(blob) : undefined;
+    const item: Shot = { id: `s${created}${Math.random().toString(36).slice(2, 6)}`, url: URL.createObjectURL(thumb ?? blob), kind, ext, blob, created };
+    setShots((s) => [item, ...s]);
     if (kind === "photo") setSnap((n) => n + 1);
-    const r = await rollAdd({ id: item.id, kind, ext, blob, created, camera: camDef.model });
-    setToast(r.saved ? (r.path ? (r.path === "Gallery" ? "Saved to Gallery · Pixi album" : "Saved to Documents/Pixi") : "Saved to your roll") : "Could not save. Storage may be full.");
+    const r = await rollAdd({ id: item.id, kind, ext, blob, thumb, created, camera: camDef.model }, { autoSave: settings.saveMode === "auto", limit: settings.rollLimit });
+    if (r.save) {
+      setToast(saveMessage(r.save));
+      if (r.save.ok) setShots((s) => s.map((x) => (x.id === item.id ? { ...x, exported: true } : x)));
+    } else setToast(r.stored ? "Kept in Pixi" : "Could not keep that shot. Storage may be full.");
+    return item;
   };
   const deleteShot = async (s: Shot) => { URL.revokeObjectURL(s.url); setShots((x) => x.filter((y) => y.id !== s.id)); await rollDelete(s.id); };
 
   // Load saved shots on launch so nothing is lost when the app is closed.
   useEffect(() => {
-    rollAll().then((items) => setShots((cur) => [...cur, ...items.filter((i) => !cur.some((c) => c.id === i.id)).map((i) => ({ ...i, url: URL.createObjectURL(i.blob) }))].slice(0, 120)));
+    rollAll().then((items) => setShots((cur) => [...cur, ...items.filter((i) => !cur.some((c) => c.id === i.id)).map((i) => ({ ...i, url: URL.createObjectURL(i.thumb ?? i.blob) }))]));
   }, []);
 
   const startCamera = async (facing: "user" | "environment") => { const ok = await cam.start(facing); if (ok) setError(""); };
@@ -466,14 +478,17 @@ export default function Home() {
     void addShot(blob, blob.type.startsWith("video") ? "video" : "photo", ext);
   };
 
-  const share = async (s: Shot) => {
-    const file = new File([s.blob], `pixi-${Date.now()}.${s.ext}`, { type: s.blob.type });
-    try {
-      if (isNative()) await nativeShare(s.blob, file.name);
-      else if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
-      else { const a = document.createElement("a"); a.href = s.url; a.download = file.name; a.click(); }
-    } catch { /* cancelled */ }
+  const share = async (s: Shot) => { await shareOrSave(s.blob, `pixi-${s.created}.${s.ext}`); };
+
+  const saveShot = async (s: Shot) => {
+    setToast("Saving…");
+    const r = await saveToGallery(s.blob, `pixi-${s.created}.${s.ext}`, s.kind);
+    setToast(saveMessage(r));
+    if (r.ok) { await markExported(s.id); setShots((x) => x.map((y) => (y.id === s.id ? { ...y, exported: true } : y))); }
   };
+
+  /** A finished strip becomes a shot of its own, so it lives in the roll like anything else. */
+  const exportStrip = async (blob: Blob, extension: string) => { await addShot(blob, "photo", extension); setView("roll"); };
 
   // Pinch to zoom, tap to focus.
   const onPointerDown = (e: React.PointerEvent) => {
@@ -527,7 +542,7 @@ export default function Home() {
     const d = dr.draft; if (!d) return;
     setMyLooks((a) => a.filter((l) => l.id !== d.id)); setFavs((f) => f.filter((x) => x !== d.id));
     if (camId === d.id) setCamId(CAMERAS[0].preset.id);
-    dr.open(null); setView("studio"); setToast("Deleted");
+    dr.open(null); setView("looks"); setToast("Deleted");
   };
   const importLook = (l: SavedLook) => { setMyLooks((a) => [l, ...a]); setCamId(l.id); };
   const getFrame = (): ImageData | null => {
@@ -543,6 +558,9 @@ export default function Home() {
     ...myLooks.map((l) => ({ preset: lookToPreset(l), maker: "My Looks", mine: true })),
     ...CAMERAS.map((c) => ({ preset: c.preset, maker: c.brand, mine: false })),
   ], [myLooks]);
+
+  const recentIds = useMemo(() => topUsed(new Set(galleryItems.map((g) => g.preset.id)), 16), [galleryItems]);
+  useEffect(() => { if (looksReady && camId) noteUse(camId); }, [camId, looksReady]);
 
   const cycle = <T,>(list: T[], cur: T, set: (v: T) => void) => set(list[(list.indexOf(cur) + 1) % list.length]);
   const rows = (["Mine", "Digicam", "Special"] as const)
@@ -582,7 +600,7 @@ export default function Home() {
 
       {view === "builder" && (
         <header className="safe-t flex shrink-0 items-center justify-between px-4 pb-1 pt-3">
-          <button onClick={() => { dr.open(null); setView("studio"); }} className="text-[15px] font-medium text-white/70">Close</button>
+          <button onClick={() => { dr.open(null); setView("looks"); }} className="text-[15px] font-medium text-white/70">Close</button>
           <h1 className="text-[17px] font-semibold tracking-[-0.01em]">Build</h1>
           <span className="w-[44px]" />
         </header>
@@ -737,26 +755,38 @@ export default function Home() {
 
       {view !== "camera" && (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <ErrorBoundary onReset={() => setView("camera")}>
           <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={fade} className="min-h-full">
-              {view === "studio" && (
-                <Gallery items={galleryItems} selectedId={camId} favs={favs}
+            <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={fade} className="min-h-full h-full">
+              {view === "looks" && (
+                <Gallery items={galleryItems} selectedId={camId} favs={favs} recentIds={recentIds}
                   onPick={(id) => { setCamId(id); setView("camera"); }}
                   onFav={(id) => setFavs((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))}
-                  onEdit={(id) => openBuilder(id)} onNew={() => openBuilder()} onShare={() => setView("share")} />
+                  onEdit={(id) => openBuilder(id)} onNew={() => openBuilder()} onShare={() => setView("share")} onSettings={() => setView("settings")} />
               )}
               {view === "builder" && dr.draft && (
                 <Builder draft={dr.draft} saved={myLooks.some((l) => l.id === dr.draft!.id)} templates={PRESETS}
                   commit={dr.commit} undo={dr.undo} redo={dr.redo} canUndo={dr.canUndo} canRedo={dr.canRedo}
                   onCompare={setCompare} onSave={saveDraft} onDelete={deleteDraft} onShare={() => { saveDraft(false); setView("share"); }} />
               )}
-              {view === "roll" && <Roll shots={shots} onShare={share} onDelete={deleteShot} onCamera={() => setView("camera")} />}
+              {view === "roll" && <Roll shots={shots} onShare={share} onSave={saveShot} onDelete={deleteShot} onCamera={() => setView("camera")} onMakeStrip={(ids) => { setStripSeed(ids); setView("build"); }} />}
+              {view === "build" && (
+                <StripStudio roll={shots} looks={galleryItems} recentLookIds={recentIds} settings={settings}
+                  setPair={(on) => setSettings({ ...settings, stripPair: on })} seed={stripSeed}
+                  onOpenCamera={() => setView("camera")} onExport={exportStrip}
+                  onShare={async (b, n) => { await shareOrSave(b, n); }} />
+              )}
+              {view === "settings" && (
+                <SettingsScreen settings={settings} setSettings={setSettings} onClose={() => setView("looks")}
+                  onCleared={() => { shots.forEach((s2) => URL.revokeObjectURL(s2.url)); setShots([]); setToast("Roll emptied"); }} />
+              )}
               {view === "share" && (
                 <ShareSheet looks={myLooks} focusId={dr.draft?.id ?? (myLooks.some((l) => l.id === camId) ? camId : undefined)} camLive={cam.live}
-                  startCamera={() => startCamera(cam.facing)} getFrame={getFrame} onImport={importLook} shots={shots} onReceiveFile={receiveFile} onClose={() => setView("studio")} />
+                  startCamera={() => startCamera(cam.facing)} getFrame={getFrame} onImport={importLook} shots={shots} onReceiveFile={receiveFile} onClose={() => setView("looks")} />
               )}
             </motion.div>
           </AnimatePresence>
+          </ErrorBoundary>
         </div>
       )}
 
@@ -770,7 +800,7 @@ export default function Home() {
       </AnimatePresence>
 
       <Nav view={view} disabled={recording || !!busy || boothStep > 0}
-        onChange={(v) => { if (v === "studio" && view === "builder") return; setView(v); }} />
+        onChange={(v) => { if (v === "looks" && view === "builder") return; setView(v); }} />
 
       <Sheet open={shelf} onClose={() => setShelf(false)} title="Camera shelf">
         <div className="mx-4 mb-4 flex rounded-xl bg-white/[0.07] p-[3px]">

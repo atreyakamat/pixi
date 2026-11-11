@@ -1,0 +1,20 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"] });
+const p = await b.newPage(); await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
+const errs=[]; p.on("pageerror",e=>errs.push(String(e))); p.on("console",m=>{if(m.type()==="error")errs.push(m.text());});
+const s=ms=>new Promise(r=>setTimeout(r,ms));
+const click=(re)=>p.evaluate(x=>{const r=new RegExp(x,"i");const el=[...document.querySelectorAll("button,label")].find(b=>r.test(b.textContent.trim())||r.test(b.getAttribute("aria-label")||""));el?.click();return !!el;},re);
+await p.evaluateOnNewDocument(()=>localStorage.setItem("pixi:onboarded","1"));
+await p.goto("http://localhost:3111",{waitUntil:"domcontentloaded"}); await s(6000);
+for(let i=0;i<4;i++){ await click("^Take photo$"); await s(4000); }
+await click("^Build$"); await s(2000);
+await click("Fill the rest"); await s(9000);
+await p.screenshot({path:"/tmp/b-photos.png"});
+await click("^Frame$"); await s(1500);
+await p.evaluate(()=>{[...document.querySelectorAll("button")].find(x=>/Theatre Ticket/.test(x.textContent))?.click();}); await s(2500);
+await p.screenshot({path:"/tmp/b-frame.png"});
+await click("^Text$"); await s(900); await p.screenshot({path:"/tmp/b-text.png"});
+await click("^Looks$"); await s(2500);
+await click("^Settings$"); await s(1500); await p.screenshot({path:"/tmp/b-settings.png"});
+console.log("errors:",JSON.stringify(errs.slice(0,5)));
+await b.close();

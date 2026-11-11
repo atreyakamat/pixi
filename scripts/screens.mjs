@@ -7,7 +7,7 @@ const click = (re) => p.evaluate((x) => { const r = new RegExp(x,"i"); const el=
 await p.evaluateOnNewDocument(() => localStorage.setItem("pixi:onboarded","1"));
 await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" }); await s(6000);
 await click("^Take photo$"); await s(5000);
-await click("^Studio$"); await s(3500);
+await click("^Looks$"); await s(3500);
 await click("^Edit "); await s(2500); await p.screenshot({ path: "/tmp/s-build.png" });
 await click("^Share…$"); await s(2500); await p.screenshot({ path: "/tmp/s-share.png" });
 await click("^Camera$"); await s(2000);

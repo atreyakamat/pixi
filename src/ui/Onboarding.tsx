@@ -5,8 +5,14 @@ import { PixiMark } from "./Logo";
 import { CameraIcon } from "./CameraIcon";
 import { CAMERAS } from "./cameras";
 import { I, type IconName } from "./icons";
+import { ensureSavePermission, isNative } from "./native";
 
 type Perm = "idle" | "ok" | "denied";
+
+async function askStorage(): Promise<Perm> {
+  if (!isNative()) return "ok";
+  return (await ensureSavePermission()) ? "ok" : "denied";
+}
 
 async function ask(kind: "video" | "audio"): Promise<Perm> {
   try {
@@ -23,6 +29,7 @@ export function Onboarding({ onFinish }: { onFinish: () => void }) {
   const [dir, setDir] = useState(1);
   const [cam, setCam] = useState<Perm>("idle");
   const [mic, setMic] = useState<Perm>("idle");
+  const [store, setStore] = useState<Perm>("idle");
   const go = (n: number) => { setDir(n > i ? 1 : -1); setI(n); };
   const picks = [CAMERAS[0], CAMERAS[12] ?? CAMERAS[1], CAMERAS[30] ?? CAMERAS[2]];
 
@@ -42,13 +49,17 @@ export function Onboarding({ onFinish }: { onFinish: () => void }) {
       <p className="mt-3 max-w-xs text-[15px] leading-relaxed text-white/45">Digicams, flip phones, camcorders, disposables and a 0.1MP phone cam. Build your own look layer by layer.</p>
     </div>,
     <div key="c" className="flex w-full flex-col items-center text-center">
-      <h2 className="text-[30px] font-bold leading-[1.15] tracking-[-0.02em]">Two quick permissions</h2>
-      <p className="mt-3 max-w-xs text-[15px] leading-relaxed text-white/45">Pixi needs the camera to show the live view. The microphone is only used when you record video. Nothing is uploaded.</p>
+      <h2 className="text-[30px] font-bold leading-[1.15] tracking-[-0.02em]">A few permissions</h2>
+      <p className="mt-3 max-w-xs text-[15px] leading-relaxed text-white/45">Pixi needs the camera for the live view. The microphone is only used while recording video, and saving puts photos in your own gallery. Nothing is uploaded.</p>
       <div className="mt-6 w-full max-w-xs space-y-3">
-        {([["Camera", "camera", cam, async () => setCam(await ask("video")), "Required for the viewfinder"], ["Microphone", "mic", mic, async () => setMic(await ask("audio")), "Only for video sound"]] as [string, IconName, Perm, () => void, string][]).map(([label, icon, st, act, why]) => (
+        {([
+          ["Camera", "camera", cam, async () => setCam(await ask("video")), "Needed for the viewfinder"],
+          ["Microphone", "mic", mic, async () => setMic(await ask("audio")), "Only for sound in videos"],
+          ["Saving photos", "save", store, async () => setStore(await askStorage()), "Writes to your gallery"],
+        ] as [string, IconName, Perm, () => void, string][]).map(([label, icon, st, act, why]) => (
           <div key={label} className="flex items-center gap-3 rounded-2xl bg-white/[0.06] p-3 text-left">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.08]"><I n={icon} /></div>
-            <div className="min-w-0 flex-1"><div className="text-[15px] font-medium">{label}</div><div className="text-[12px] leading-snug text-white/45">{st === "denied" ? "Blocked. Enable it in Android Settings, Apps, Pixi, Permissions." : why}</div></div>
+            <div className="min-w-0 flex-1"><div className="text-[15px] font-medium">{label}</div><div className="text-[12px] leading-snug text-white/45">{st === "denied" ? "Blocked. Turn it on in Settings, Apps, Pixi, Permissions." : why}</div></div>
             {st === "ok" ? <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#30d158] text-black"><I n="check" className="h-4 w-4" w={2.6} /></span>
               : <motion.button whileTap={{ scale: 0.94 }} onClick={act} className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-black">{st === "denied" ? "Retry" : "Allow"}</motion.button>}
           </div>

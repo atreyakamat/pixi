@@ -12,7 +12,7 @@ const switches=()=>p.evaluate(()=>document.querySelectorAll('button[role="switch
 const setVal=(sel,v)=>p.evaluate((sel,v)=>{const i=document.querySelector(sel); const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set; s.call(i,v); i.dispatchEvent(new Event("input",{bubbles:true}));},sel,v);
 const R = {};
 
-await clickT("Studio"); await sleep(6000);
+await clickT("Looks"); await sleep(6000);
 R.tiles = await p.evaluate(()=>document.querySelectorAll("section .grid > div").length);
 R.thumbs = await p.evaluate(()=>[...document.querySelectorAll("section .grid img")].filter(i=>i.src.startsWith("data:image")).length);
 await p.screenshot({ path: "/tmp/m_studio.png" });
@@ -42,7 +42,7 @@ R.filmApplied = await p.evaluate(()=>JSON.parse(localStorage.getItem("pixi:v2"))
 await p.screenshot({ path: "/tmp/m_film.png" });
 await p.keyboard.press("Escape"); await clickT("Camera"); await sleep(600);
 
-await clickT("Studio"); await sleep(1500);
+await clickT("Looks"); await sleep(1500);
 await clickT("Share and receive looks"); await sleep(3000);
 R.qr = await p.evaluate(()=>!!document.querySelector('img[alt="QR code for this look"]'));
 R.nearby = await p.evaluate(()=>document.body.innerText.includes("Send photos nearby"));

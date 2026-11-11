@@ -49,26 +49,31 @@ function Tile({ it, selected, fav, onPick, onFav, onEdit }: { it: GalleryItem; s
   );
 }
 
-export function Gallery({ items, selectedId, favs, onPick, onFav, onEdit, onNew, onShare }: {
-  items: GalleryItem[]; selectedId: string; favs: string[];
-  onPick: (id: string) => void; onFav: (id: string) => void; onEdit: (id: string) => void; onNew: () => void; onShare: () => void;
+export function Gallery({ items, selectedId, favs, recentIds, onPick, onFav, onEdit, onNew, onShare, onSettings }: {
+  items: GalleryItem[]; selectedId: string; favs: string[]; recentIds: string[];
+  onPick: (id: string) => void; onFav: (id: string) => void; onEdit: (id: string) => void; onNew: () => void; onShare: () => void; onSettings: () => void;
 }) {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState("All");
-  const makers = useMemo(() => ["All", "Favourites", ...(items.some((i) => i.mine) ? ["My Looks"] : []), ...Array.from(new Set(items.filter((i) => !i.mine).map((i) => i.maker)))], [items]);
-  const list = items.filter((i) => {
+  const makers = useMemo(() => ["All", ...(recentIds.length >= 3 ? ["Most used"] : []), "Favourites", ...(items.some((i) => i.mine) ? ["My Looks"] : []), ...Array.from(new Set(items.filter((i) => !i.mine).map((i) => i.maker)))], [items, recentIds.length]);
+  const SPECIAL = ["All", "Most used", "Favourites", "My Looks"];
+  let list = items.filter((i) => {
+    if (tab === "Most used" && !recentIds.includes(i.preset.id)) return false;
     if (tab === "Favourites" && !favs.includes(i.preset.id)) return false;
     if (tab === "My Looks" && !i.mine) return false;
-    if (tab !== "All" && tab !== "Favourites" && tab !== "My Looks" && i.maker !== tab) return false;
+    if (!SPECIAL.includes(tab) && i.maker !== tab) return false;
     const s = q.trim().toLowerCase();
     return !s || i.preset.name.toLowerCase().includes(s) || i.preset.family.toLowerCase().includes(s) || i.preset.blurb.toLowerCase().includes(s);
   });
+  // The looks a person actually reaches for come first, so the shelf learns from use.
+  if (tab === "Most used") list = [...list].sort((a, b) => recentIds.indexOf(a.preset.id) - recentIds.indexOf(b.preset.id));
 
   return (
     <section className="pb-6">
       <header className="safe-t flex items-center justify-between px-4 pb-2 pt-3">
         <h1 className="text-[28px] font-bold tracking-[-0.02em]">Studio</h1>
         <div className="flex gap-2">
+          <motion.button whileTap={press} transition={snappy} onClick={onSettings} aria-label="Settings" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.09]"><I n="gear" className="h-[18px] w-[18px]" /></motion.button>
           <motion.button whileTap={press} transition={snappy} onClick={onShare} aria-label="Share and receive looks" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.09]"><I n="share" className="h-[18px] w-[18px]" /></motion.button>
           <motion.button whileTap={press} transition={snappy} onClick={() => { tap(); onNew(); }} aria-label="Create a new look" className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black"><I n="plus" className="h-[18px] w-[18px]" w={2.2} /></motion.button>
         </div>
@@ -89,7 +94,7 @@ export function Gallery({ items, selectedId, favs, onPick, onFav, onEdit, onNew,
       </div>
 
       {list.length === 0 ? (
-        <p className="px-10 py-16 text-center text-[15px] leading-relaxed text-white/40">{tab === "Favourites" ? "Tap the star on any look to keep it here." : "No looks match that search."}</p>
+        <p className="px-10 py-16 text-center text-[15px] leading-relaxed text-white/40">{tab === "Favourites" ? "Tap the star on any look to keep it here." : tab === "Most used" ? "The looks you use most will collect here." : "No looks match that search."}</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 px-4">
           {list.map((it) => (
