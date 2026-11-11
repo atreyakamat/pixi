@@ -1,0 +1,15 @@
+import { build } from "esbuild";
+import puppeteer from "puppeteer-core";
+import fs from "node:fs";
+await build({ entryPoints: ["scripts/layout-entry.ts"], bundle: true, format: "iife", outfile: "/tmp/strip.js", alias: { "@": "./src" }, logLevel: "error" });
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox"] });
+const p = await b.newPage();
+const errs = []; p.on("pageerror", e => errs.push(String(e)));
+const only = process.argv[2] || "";
+await p.setContent(`<body style='margin:0'><script>window.__only=${JSON.stringify(only)}||undefined</script><canvas id=out></canvas></body>`);
+await p.addScriptTag({ content: fs.readFileSync("/tmp/strip.js", "utf8") });
+await p.waitForFunction("window.__done === true || window.__err", { timeout: 60000 });
+console.log("err:", await p.evaluate("window.__err || null"), "pageerrors:", JSON.stringify(errs));
+const url = await p.evaluate("document.getElementById('out').toDataURL('image/jpeg',0.9)");
+fs.writeFileSync(only ? `/tmp/layouts-${only}.jpg` : "/tmp/layouts.jpg", Buffer.from(url.split(",")[1], "base64"));
+await b.close();

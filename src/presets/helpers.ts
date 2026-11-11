@@ -11,6 +11,7 @@ export interface PresetInput {
   family: string;
   blurb: string;
   aspect?: number;
+  captureSide?: number;
   layers: LayerSpec[];
   overlays?: OverlaySpec[];
 }

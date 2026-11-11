@@ -13,6 +13,16 @@ const cameraError = (e: unknown): string => {
 };
 
 /** Owns the camera stream: start, flip, lens switch and torch. The hidden <video> is read by the render loop. */
+function ensureVideo(ref: { current: HTMLVideoElement | null }): HTMLVideoElement {
+  if (ref.current) return ref.current;
+  const v = document.createElement("video");
+  v.setAttribute("playsinline", ""); v.setAttribute("autoplay", ""); v.muted = true;
+  v.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0";
+  document.body.appendChild(v);
+  ref.current = v;
+  return v;
+}
+
 export function useCamera() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -23,8 +33,10 @@ export function useCamera() {
   const [lensId, setLensId] = useState<string>("");
   const [torchOk, setTorchOk] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const wantRef = useRef<{ on: boolean; facing: "user" | "environment"; lens?: string }>({ on: false, facing: "environment" });
 
   const stop = useCallback(() => {
+    wantRef.current = { ...wantRef.current, on: false };
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -46,20 +58,15 @@ export function useCamera() {
     for (const c of attempts) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia(c);
-        let v = videoRef.current;
-        if (!v) {
-          v = document.createElement("video");
-          v.setAttribute("playsinline", ""); v.setAttribute("autoplay", ""); v.muted = true;
-          v.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0";
-          document.body.appendChild(v);
-          videoRef.current = v;
-        }
+        const v = ensureVideo(videoRef);
         v.srcObject = stream;
         await v.play();
         streamRef.current = stream;
         const track = stream.getVideoTracks()[0];
         const caps = (track.getCapabilities?.() ?? {}) as { torch?: boolean };
         setTorchOk(!!caps.torch); setTorchOn(false);
+        wantRef.current = { on: true, facing: want, lens: deviceId };
+        stream.getVideoTracks()[0].addEventListener("ended", () => { if (streamRef.current === stream) setLive(false); });
         setFacing(want); setLive(true); setError("");
         try {
           const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
@@ -82,6 +89,28 @@ export function useCamera() {
 
   const flip = useCallback(() => start(facing === "user" ? "environment" : "user"), [facing, start]);
   const useLens = useCallback((id: string) => start("environment", id), [start]);
+
+  // Release the camera when the app goes to the background and bring it back on return.
+  useEffect(() => {
+    const release = () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setLive(false); setTorchOn(false);
+    };
+    const resume = () => {
+      const w = wantRef.current;
+      if (!w.on) return;
+      const t = streamRef.current?.getVideoTracks()[0];
+      if (t && t.readyState === "live" && !t.muted) return;
+      void start(w.facing, w.lens);
+    };
+    const onVis = () => (document.hidden ? release() : resume());
+    document.addEventListener("visibilitychange", onVis);
+    let sub: { remove: () => Promise<void> } | undefined;
+    import("@capacitor/app").then(({ App }) => App.addListener("appStateChange", (st) => (st.isActive ? resume() : release()))).then((h) => { sub = h; }).catch(() => {});
+    return () => { document.removeEventListener("visibilitychange", onVis); void sub?.remove(); };
+  }, [start]);
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 

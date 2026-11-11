@@ -1,0 +1,12 @@
+import { build } from "esbuild";
+import puppeteer from "puppeteer-core";
+import fs from "node:fs";
+await build({ entryPoints: ["scripts/backup-entry.ts"], bundle: true, format: "iife", outfile: "/tmp/backup.js", alias: { "@": "./src" }, logLevel: "error", resolveExtensions: [".ts", ".tsx", ".js"] });
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox"] });
+const p = await b.newPage();
+const errs = []; p.on("pageerror", e => errs.push(String(e)));
+await p.goto("http://localhost:3111/");
+await p.addScriptTag({ content: fs.readFileSync("/tmp/backup.js", "utf8") });
+await p.waitForFunction("window.__done || window.__err", { timeout: 60000 });
+console.log(JSON.stringify(await p.evaluate("window.__done || window.__err"), null, 1), "pageerrors:", JSON.stringify(errs));
+await b.close();

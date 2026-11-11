@@ -4,6 +4,10 @@ import QRCode from "qrcode";
 import jsQR from "jsqr";
 import { NearbyPanel, type NearbyShot } from "./NearbyPanel";
 import { decodeLook, encodeLook, type SavedLook } from "./store";
+import { AnimatePresence, motion } from "framer-motion";
+import { I } from "./icons";
+import { Card } from "./Card";
+import { press, snappy } from "./motion";
 
 interface Props {
   looks: SavedLook[];
@@ -14,9 +18,10 @@ interface Props {
   onImport: (l: SavedLook) => void;
   shots: NearbyShot[];
   onReceiveFile: (blob: Blob, name: string) => void;
+  onClose: () => void;
 }
 
-export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onImport, shots, onReceiveFile }: Props) {
+export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onImport, shots, onReceiveFile, onClose }: Props) {
   const [sel, setSel] = useState(focusId ?? looks[0]?.id ?? "");
   const [code, setCode] = useState("");
   const [qr, setQr] = useState("");
@@ -26,14 +31,19 @@ export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onI
   const [msg, setMsg] = useState("");
   const done = useRef(false);
 
-  useEffect(() => { if (focusId) setSel(focusId); }, [focusId]);
+  // A new focus from outside replaces the selection; the sheet is keyed on it by the caller as well.
+  const [seenFocus, setSeenFocus] = useState(focusId);
+  if (focusId !== seenFocus) { setSeenFocus(focusId); if (focusId) setSel(focusId); }
 
   useEffect(() => {
     const l = looks.find((x) => x.id === sel);
-    setQr(""); setCode(""); setNote("");
-    if (!l) return;
     let dead = false;
     (async () => {
+      // Clearing after a tick keeps the previous code on screen until the new one is ready, with no synchronous setState in the effect.
+      await Promise.resolve();
+      if (dead) return;
+      setQr(""); setCode(""); setNote("");
+      if (!l) return;
       const c = await encodeLook(l);
       if (dead) return;
       setCode(c);
@@ -63,43 +73,62 @@ export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);
 
-  const copy = async () => { try { await navigator.clipboard.writeText(code); setMsg("Code copied."); } catch { setMsg("Could not copy. Select the code manually."); } };
-  const btn = "rounded-full bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-200 active:bg-neutral-700 disabled:opacity-40";
+  const copy = async () => { try { await navigator.clipboard.writeText(code); setMsg("Code copied."); } catch { setMsg("Could not copy. Select the code by hand."); } };
 
   return (
-    <section className="space-y-5 px-3 pb-6 pt-1">
-      <div className="space-y-2 rounded-2xl bg-neutral-900 p-3 ring-1 ring-white/10">
-        <h2 className="text-sm font-semibold">Share a look</h2>
-        {looks.length === 0 ? <p className="text-xs text-neutral-400">Save a look to My Looks in the builder first, then share it here.</p> : (
-          <>
-            <select aria-label="Look to share" value={sel} onChange={(e) => setSel(e.target.value)} className="w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm">
-              {looks.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-            {qr ? <img src={qr} alt="QR code for this look" className="mx-auto w-60 rounded-xl bg-white p-1" /> : note ? <p className="text-xs text-amber-300">{note}</p> : <div className="mx-auto h-60 w-60 animate-pulse rounded-xl bg-neutral-800" />}
-            <p className="text-center text-xs text-neutral-400">On the other phone open Share → Scan a look and point it here. No internet needed.</p>
-            <div className="flex justify-center gap-2"><button className={btn} onClick={copy} disabled={!code}>Copy code</button></div>
-          </>
-        )}
+    <section className="px-4 pb-8">
+      <header className="safe-t flex items-center justify-between pb-4 pt-3">
+        <h1 className="text-[28px] font-bold tracking-[-0.02em]">Share</h1>
+        <motion.button whileTap={press} transition={snappy} aria-label="Close" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.09]"><I n="close" className="h-[18px] w-[18px]" /></motion.button>
+      </header>
+
+      <div className="space-y-4">
+        <Card title="Share a look" note="The other phone scans this. No internet needed.">
+          {looks.length === 0 ? (
+            <p className="text-[15px] leading-relaxed text-white/45">Save a look in Build first, then it will show up here to share.</p>
+          ) : (
+            <>
+              <div className="relative">
+                <select aria-label="Look to share" value={sel} onChange={(e) => setSel(e.target.value)}
+                  className="w-full appearance-none rounded-xl bg-white/[0.07] px-3.5 py-3 pr-9 text-[15px] font-medium outline-none">
+                  {looks.map((l) => <option key={l.id} value={l.id} className="bg-[#1c1c1f]">{l.name}</option>)}
+                </select>
+                <I n="chevR" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-white/40" />
+              </div>
+              <div className="flex justify-center py-1">
+                {qr ? <motion.img key={qr} src={qr} alt="QR code for this look" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={snappy} className="w-56 rounded-2xl bg-white p-2.5" />
+                  : note ? <p className="py-6 text-center text-[15px] text-[var(--accent)]">{note}</p>
+                    : <div className="h-56 w-56 rounded-2xl bg-white/[0.05]" />}
+              </div>
+              <button onClick={copy} disabled={!code} className="w-full rounded-xl bg-white/[0.07] py-3 text-[15px] font-medium disabled:opacity-40">Copy code instead</button>
+            </>
+          )}
+        </Card>
+
+        <Card title="Receive a look" note="Scan someone's QR code, or paste the code they sent you.">
+          {!camLive ? (
+            <button onClick={startCamera} className="w-full rounded-xl bg-white py-3 text-[15px] font-semibold text-black">Start the camera to scan</button>
+          ) : (
+            <button onClick={() => { setMsg(""); setScanning(!scanning); }} className={`w-full rounded-xl py-3 text-[15px] font-semibold ${scanning ? "bg-white/[0.07] text-white" : "bg-white text-black"}`}>
+              {scanning ? "Stop scanning" : "Scan a QR code"}
+            </button>
+          )}
+          {scanning && <p className="text-center text-[13px] text-white/45">Point the camera at the code. Watch the preview on the Camera tab.</p>}
+          <div className="flex gap-2">
+            <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="PIXI1.…"
+              className="min-w-0 flex-1 rounded-xl bg-white/[0.07] px-3.5 py-3 text-[15px] outline-none placeholder:text-white/30 focus:ring-2 focus:ring-[var(--accent)]" />
+            <button disabled={!paste.trim()} onClick={async () => { if (await importCode(paste)) setPaste(""); }}
+              className="shrink-0 rounded-xl bg-white/[0.07] px-5 text-[15px] font-semibold disabled:opacity-40">Add</button>
+          </div>
+        </Card>
+
+        <NearbyPanel shots={shots} camLive={camLive} startCamera={startCamera} getFrame={getFrame} onReceiveFile={onReceiveFile}
+          onReceiveLook={async (c) => { const l = await decodeLook(c); if (!l) return false; onImport(l); return true; }} />
       </div>
 
-      <div className="space-y-2 rounded-2xl bg-neutral-900 p-3 ring-1 ring-white/10">
-        <h2 className="text-sm font-semibold">Scan a look</h2>
-        {!camLive ? (
-          <div className="space-y-2"><p className="text-xs text-neutral-400">The scanner uses the camera.</p><button className="rounded-full bg-orange-500 px-4 py-2 text-xs font-semibold text-black" onClick={startCamera}>Start camera</button></div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-xs text-neutral-400">{scanning ? "Point the camera at a Pixi QR code. Look at the preview above." : "Tap Scan, then point the camera at a Pixi QR code."}</p>
-            <button className="rounded-full bg-orange-500 px-4 py-2 text-xs font-semibold text-black" onClick={() => { setMsg(""); setScanning(!scanning); }}>{scanning ? "Stop scanning" : "Scan"}</button>
-          </div>
-        )}
-        <div className="flex gap-2">
-          <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Or paste a code (PIXI1.…)" className="min-w-0 flex-1 rounded-lg bg-neutral-800 px-3 py-2 text-xs outline-none ring-1 ring-white/10 focus:ring-orange-500" />
-          <button className={btn} disabled={!paste.trim()} onClick={async () => { if (await importCode(paste)) setPaste(""); }}>Add</button>
-        </div>
-      </div>
-      <NearbyPanel shots={shots} camLive={camLive} startCamera={startCamera} getFrame={getFrame} onReceiveFile={onReceiveFile}
-        onReceiveLook={async (c) => { const l = await decodeLook(c); if (!l) return false; onImport(l); return true; }} />
-      {msg && <p role="status" className="text-center text-xs text-orange-300">{msg}</p>}
+      <AnimatePresence>
+        {msg && <motion.p key={msg} role="status" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={snappy} className="pt-4 text-center text-[13px] text-[var(--accent)]">{msg}</motion.p>}
+      </AnimatePresence>
     </section>
   );
 }

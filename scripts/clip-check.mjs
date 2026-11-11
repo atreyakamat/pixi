@@ -1,0 +1,12 @@
+import { build } from "esbuild";
+import puppeteer from "puppeteer-core";
+import fs from "node:fs";
+await build({ entryPoints: ["scripts/clip-entry.ts"], bundle: true, format: "iife", outfile: "/tmp/clip.js", alias: { "@": "./src" }, logLevel: "error" });
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox", "--use-gl=swiftshader", "--enable-unsafe-swiftshader"] });
+const p = await b.newPage();
+const errs = []; p.on("pageerror", e => errs.push(String(e)));
+await p.setContent("<body></body>");
+await p.addScriptTag({ content: fs.readFileSync("/tmp/clip.js", "utf8") });
+await p.waitForFunction("window.__done || window.__err", { timeout: 60000 });
+console.log(JSON.stringify(await p.evaluate("window.__done || window.__err")), "pageerrors:", JSON.stringify(errs));
+await b.close();
