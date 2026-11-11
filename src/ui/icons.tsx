@@ -22,6 +22,10 @@ const P: Record<string, string> = {
   lock: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z",
   mic: "M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM6 11a6 6 0 0 0 12 0M12 17v4",
   film: "M4 4h16v16H4zM8 4v16M16 4v16M4 8h4M4 12h4M4 16h4M16 8h4M16 12h4M16 16h4",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM16 16l4 4",
+  star: "m12 4 2.5 5.2 5.5.8-4 4 1 5.6L12 17l-5 2.6 1-5.6-4-4 5.5-.8Z",
+  pencil: "M4 20h4L19 9l-4-4L4 16zM14.5 5.5l4 4",
+  plus: "M12 5v14M5 12h14",
 };
 export type IconName = keyof typeof P;
 export function I({ n, className = "h-5 w-5", w = 1.8 }: { n: IconName; className?: string; w?: number }) {

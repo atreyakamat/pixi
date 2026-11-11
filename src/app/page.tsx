@@ -10,7 +10,7 @@ import { isNative, nativeShare } from "@/ui/native";
 import { rollAdd, rollAll, rollDelete } from "@/ui/roll";
 import { ShareSheet } from "@/ui/ShareSheet";
 import { AnimatePresence, motion } from "framer-motion";
-import { I } from "@/ui/icons";
+import { I, type IconName } from "@/ui/icons";
 import { PixiMark } from "@/ui/Logo";
 import { Splash } from "@/ui/Splash";
 import { Onboarding } from "@/ui/Onboarding";
@@ -21,6 +21,7 @@ import { Sheet } from "@/ui/Sheet";
 import { Nav, type View } from "@/ui/Nav";
 import { Roll } from "@/ui/Roll";
 import { composeBooth, type BoothLayout } from "@/ui/booth";
+import { fade, press, smooth, snappy, tap } from "@/ui/motion";
 import { FILMS } from "@/presets/films";
 import { useDraft } from "@/ui/useDraft";
 import { loadFavs, loadLooks, lookToPreset, newId, persistFavs, persistLooks, presetToLook, type SavedLook } from "@/ui/store";
@@ -99,6 +100,7 @@ export default function Home() {
   const pauseRef = useRef(false);
   const viewRef = useRef<View>("camera");
   const bootRef = useRef("splash");
+  const sheetRef = useRef(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d0: number; z0: number } | null>(null);
   const cam = useCamera();
@@ -125,6 +127,7 @@ export default function Home() {
   const [snap, setSnap] = useState(0);
   const [boot, setBoot] = useState<"splash" | "onboard" | "ready">("splash");
   bootRef.current = boot;
+  sheetRef.current = shelf || proSheet;
   const [lcd, setLcd] = useState<LcdMode>("off");
   const [intensity, setIntensity] = useState(1);
   const [mode, setMode] = useState<ModeId>("photo");
@@ -224,18 +227,21 @@ export default function Home() {
     r.setSource(s, s.width, s.height);
     r.warmUp();
     r.onRestored = () => { r.warmUp(); };
-    let raf = 0, side = 1100, slow = 0, lastDraw = 0;
+    // Adaptive quality: aim for a 60fps preview and trade resolution, not frame rate, on slower phones.
+    const MAX = 1100;
+    let raf = 0, side = MAX, slow = 0, fast = 0;
     const t0 = performance.now();
     const loop = (t: number) => {
-      if (pauseRef.current || bootRef.current === "onboard" || !(viewRef.current === "camera" || viewRef.current === "builder") || document.hidden || t - lastDraw < 28) { raf = requestAnimationFrame(loop); return; }
-      lastDraw = t;
+      if (pauseRef.current || sheetRef.current || bootRef.current === "onboard" || !(viewRef.current === "camera" || viewRef.current === "builder") || document.hidden) { raf = requestAnimationFrame(loop); return; }
       const v = cam.videoRef.current, src = srcRef.current, ov = overrideRef.current;
       if (ov) r.setSource(ov.el, ov.w, ov.h);
       else if (v && v.readyState >= 2 && v.videoWidth) r.setSource(v, v.videoWidth, v.videoHeight);
       else if (src) r.setSource(src.el, src.w, src.h);
       const a = performance.now();
       r.render({ ...optsRef.current, maxSide: side }, (t - t0) / 1000);
-      if (performance.now() - a > 40 && ++slow > 10 && side > 500) { side = Math.round(side * 0.8); slow = 0; }
+      const cost = performance.now() - a;
+      if (cost > 13) { fast = 0; if (++slow > 8 && side > 420) { side = Math.round(side * 0.82); slow = 0; } }
+      else if (cost < 6) { slow = 0; if (++fast > 90 && side < MAX) { side = Math.min(MAX, Math.round(side * 1.12)); fast = 0; } }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -521,7 +527,7 @@ export default function Home() {
     const d = dr.draft; if (!d) return;
     setMyLooks((a) => a.filter((l) => l.id !== d.id)); setFavs((f) => f.filter((x) => x !== d.id));
     if (camId === d.id) setCamId(CAMERAS[0].preset.id);
-    dr.open(null); setView("gallery"); setToast("Deleted");
+    dr.open(null); setView("studio"); setToast("Deleted");
   };
   const importLook = (l: SavedLook) => { setMyLooks((a) => [l, ...a]); setCamId(l.id); };
   const getFrame = (): ImageData | null => {
@@ -543,216 +549,332 @@ export default function Home() {
     .map((row) => ({ row, items: allCams.filter((c) => c.row === row && (brand === "All" || c.brand === brand)) }))
     .filter((r) => r.items.length);
   const carouselItems = useMemo(() => (["Mine", "Digicam", "Special"] as const).flatMap((r) => allCams.filter((c) => c.row === r)), [allCams]);
-  const chip = (on: boolean) => `shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${on ? "bg-orange-500 text-black" : "bg-neutral-800 text-neutral-300 active:bg-neutral-700"}`;
-  const tb = (on: boolean) => `flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-full px-2.5 text-[10px] font-bold transition-colors ${on ? "bg-orange-500 text-black" : "bg-white/10 text-neutral-200"}`;
+  const chip = (on: boolean) => `shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors ${on ? "bg-white text-black" : "bg-white/[0.08] text-white/80"}`;
+  const seg = (on: boolean) => `shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${on ? "bg-white text-black" : "bg-white/[0.08] text-white/70"}`;
   const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
   const isVideoMode = mode === "video" || mode === "timelapse";
   const last = shots[0];
-  const showSlot = view === "camera" || view === "builder";
   const aspectLabel = ASPECTS.find((a) => a.id === aspectId)!.label;
-  const spring = { type: "spring" as const, stiffness: 420, damping: 32 };
 
   return (
-    <main className="fixed inset-0 mx-auto flex w-full max-w-md flex-col overflow-hidden bg-black text-neutral-100">
+    <main className="fixed inset-0 mx-auto flex w-full max-w-md flex-col overflow-hidden bg-black text-white">
       <Splash show={boot === "splash"} onDone={finishSplash} />
       <AnimatePresence>{boot === "onboard" && <Onboarding key="ob" onFinish={finishOnboard} />}</AnimatePresence>
 
       {view === "camera" && (
-        <header className="safe-t flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-2">
-          <PixiMark size={30} />
-          <motion.button whileTap={{ scale: 0.96 }} onClick={() => { setShelfTab("cams"); setShelf(true); }} className="lcd mx-1 min-w-0 flex-1 truncate rounded-full bg-white/10 px-3 py-2 text-left text-[10px] text-neutral-200">
-            {camDef.brand.toUpperCase()} {camDef.model} <span className="text-neutral-500">▾</span>
-          </motion.button>
-          <motion.button whileTap={{ scale: 0.9 }} aria-label="Flash" className={tb(flashOn)} onClick={() => setFlashOn(!flashOn)}><I n="bolt" className="h-4 w-4" /></motion.button>
-          <motion.button whileTap={{ scale: 0.9 }} aria-label="Timer" className={tb(timerSec > 0)} onClick={() => cycle(TIMERS, timerSec, setTimerSec)}><I n="timer" className="h-4 w-4" />{timerSec > 0 && `${timerSec}s`}</motion.button>
-          <motion.button whileTap={{ scale: 0.9 }} aria-label="Ratio" className={tb(aspectId !== "look")} disabled={recording} onClick={() => cycle(ASPECTS.map((a) => a.id), aspectId, setAspectId)}>{aspectId === "look" ? <I n="ratio" className="h-4 w-4" /> : aspectLabel}</motion.button>
-          <motion.button whileTap={{ scale: 0.9 }} aria-label="Grid" className={tb(gridId !== "off")} onClick={() => cycle(GRIDS.map((g) => g.id), gridId, setGridId)}><I n="grid" className="h-4 w-4" /></motion.button>
-          <motion.button whileTap={{ scale: 0.9 }} aria-label="Watermark" className={tb(wmId !== "off")} onClick={() => cycle(WATERMARKS.map((w) => w.id), wmId, setWmId)}><I n="tag" className="h-4 w-4" /></motion.button>
+        <header className="safe-t flex shrink-0 items-center justify-around px-2 pt-1">
+          {([
+            ["Flash", "bolt", flashOn, () => setFlashOn(!flashOn), flashOn ? "On" : ""],
+            ["Timer", "timer", timerSec > 0, () => cycle(TIMERS, timerSec, setTimerSec), timerSec > 0 ? `${timerSec}s` : ""],
+            ["Aspect ratio", "ratio", aspectId !== "look", () => !recording && cycle(ASPECTS.map((a) => a.id), aspectId, setAspectId), aspectId === "look" ? "" : aspectLabel],
+            ["Grid", "grid", gridId !== "off", () => cycle(GRIDS.map((g) => g.id), gridId, setGridId), ""],
+            ["Looks, film and effects", "sliders", shelf, () => { setShelfTab("style"); setShelf(true); }, ""],
+          ] as [string, IconName, boolean, () => void, string][]).map(([label, icon, on, act, note]) => (
+            <motion.button key={label} aria-label={label} aria-pressed={on} whileTap={press} transition={snappy}
+              onClick={() => { tap(); act(); }}
+              className={`flex h-11 w-11 flex-col items-center justify-center gap-0.5 ${on ? "text-[var(--accent)]" : "text-white/75"}`}>
+              <I n={icon} className="h-[21px] w-[21px]" w={1.7} />
+              <span className="h-[9px] text-[9px] font-semibold leading-none tracking-wide">{note}</span>
+            </motion.button>
+          ))}
         </header>
       )}
 
-      <div ref={slotRef} className={`relative mx-4 flex min-h-0 items-center justify-center ${view === "camera" ? "flex-1" : view === "builder" ? "safe-t h-[34dvh] shrink-0 pt-2" : "hidden"}`}>
-        <div className="relative" style={{ width: fit.w, height: fit.h }}>
-          <div className="pointer-events-none absolute -inset-[7px] rounded-[22px]" style={{ background: "linear-gradient(145deg,#2c2c33,#0b0b0e)", boxShadow: "0 0 0 1px rgba(255,255,255,.08), 0 20px 40px rgba(0,0,0,.7)" }} />
-          <span className="pointer-events-none absolute -top-[3px] right-3 h-1.5 w-1.5 rounded-full" style={{ background: recording ? "#ef4444" : camDef.color, boxShadow: `0 0 8px ${recording ? "#ef4444" : camDef.color}` }} />
-          <div className="relative h-full w-full touch-none overflow-hidden rounded-2xl bg-black"
+      {view === "builder" && (
+        <header className="safe-t flex shrink-0 items-center justify-between px-4 pb-1 pt-3">
+          <button onClick={() => { dr.open(null); setView("studio"); }} className="text-[15px] font-medium text-white/70">Close</button>
+          <h1 className="text-[17px] font-semibold tracking-[-0.01em]">Build</h1>
+          <span className="w-[44px]" />
+        </header>
+      )}
+
+      <div ref={slotRef} className={`relative flex min-h-0 items-center justify-center ${view === "camera" ? "mx-3 mt-1 flex-1" : view === "builder" ? "mx-3 h-[30dvh] shrink-0" : "hidden"}`}>
+        <div className="relative overflow-hidden rounded-[22px] bg-[#0c0c0e] transition-[width,height] duration-300 ease-out" style={{ width: fit.w, height: fit.h }}>
+          <div className="relative h-full w-full touch-none"
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
             <canvas ref={canvasRef} className="gpu absolute inset-0 block h-full w-full" />
             <GridOverlay id={gridId} />
-            {ring && <div key={ring.k} className="pointer-events-none absolute h-14 w-14 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full border-2 border-yellow-300" style={{ left: `${ring.x}%`, top: `${ring.y}%` }} />}
-            {snap > 0 && <motion.div key={snap} className="pointer-events-none absolute inset-0 bg-white" initial={{ opacity: 0.85 }} animate={{ opacity: 0 }} transition={{ duration: 0.38, ease: "easeOut" }} />}
+            <span className="pointer-events-none absolute inset-0 rounded-[22px] hair" />
+
+            {ring && <div key={ring.k} className="pointer-events-none absolute h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] border-[var(--accent)] motion-safe:animate-ping" style={{ left: `${ring.x}%`, top: `${ring.y}%` }} />}
+            {snap > 0 && <motion.div key={snap} className="pointer-events-none absolute inset-0 bg-white" initial={{ opacity: 0.9 }} animate={{ opacity: 0 }} transition={{ duration: 0.32, ease: "easeOut" }} />}
             {flash && <div className="pointer-events-none absolute inset-0 bg-white" />}
-            <AnimatePresence>{countdown > 0 && <motion.div key={countdown} initial={{ scale: 1.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} transition={spring} className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 text-8xl font-light text-white">{countdown}</motion.div>}</AnimatePresence>
-            {busy && <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 bg-black/60 py-2 text-center text-sm">{busy}</div>}
-            <div className="lcd pointer-events-none absolute left-2 top-2 flex items-center gap-2 text-[9px] text-white/80">
-              {recording ? <span className="flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[10px]"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{mode === "timelapse" ? `${tlCount} FR` : `REC ${mmss}`}</span>
-                : <span className="rounded-full bg-black/45 px-2 py-1">{boothStep ? `PHOTO ${boothStep}/4` : `${MODES.find((m) => m.id === mode)!.label.toUpperCase()} · ${aspectLabel === "Auto" ? "AUTO" : aspectLabel}`}</span>}
+
+            <AnimatePresence>
+              {countdown > 0 && (
+                <motion.div key={countdown} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }} transition={snappy}
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center text-[88px] font-extralight tabular-nums text-white drop-shadow-[0_2px_12px_rgba(0,0,0,.6)]">{countdown}</motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
+              <AnimatePresence mode="wait" initial={false}>
+                {recording ? (
+                  <motion.span key="rec" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={fade}
+                    className="lcd flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold backdrop-blur-md">
+                    <motion.span animate={{ opacity: [1, 0.25, 1] }} transition={{ duration: 1.4, repeat: Infinity }} className="h-[7px] w-[7px] rounded-full bg-[#ff3b30]" />
+                    {mode === "timelapse" ? `${tlCount} FRAMES` : mmss}
+                  </motion.span>
+                ) : boothStep || aspectId !== "look" ? (
+                  <motion.span key={`idle${boothStep}`} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={fade}
+                    className="lcd rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-semibold text-white/85 backdrop-blur-md">
+                    {boothStep ? `${boothStep} OF 4` : aspectLabel}
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
             </div>
-            {mode === "portrait" && !recording && <div className="pointer-events-none absolute left-2 top-9 rounded-full bg-black/50 px-2 py-1 text-[10px]">Tap to set focus</div>}
-            {!cam.live && !(error || cam.error) && boot === "ready" && (
-              <motion.button whileTap={{ scale: 0.95 }} onClick={() => startCamera(cam.facing)} className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-orange-500 px-5 py-2 text-sm font-semibold text-black shadow-lg">Start camera</motion.button>
+
+            <AnimatePresence>
+              {busy && (
+                <motion.div key="busy" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade}
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-[2px]">
+                  <span className="rounded-full bg-black/70 px-4 py-2 text-[13px] font-medium">{busy}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {mode === "portrait" && !recording && !busy && (
+              <span className="pointer-events-none absolute inset-x-0 bottom-14 text-center text-[11px] text-white/55">Tap to set focus</span>
             )}
+
+            {!cam.live && !(error || cam.error) && boot === "ready" && (
+              <motion.button whileTap={press} transition={snappy} onClick={() => startCamera(cam.facing)}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black"><I n="camera" className="h-7 w-7" /></span>
+                <span className="text-[13px] font-medium">Tap to start the camera</span>
+              </motion.button>
+            )}
+
             {(error || cam.error) && (
-              <div className="absolute inset-x-2 bottom-2 rounded-xl bg-black/85 p-3 text-center text-xs text-amber-200" onPointerDown={(e) => e.stopPropagation()}>
-                {error || cam.error}
-                <div className="mt-2 flex justify-center gap-2">
-                  <button onClick={() => { setError(""); cam.setError(""); startCamera(cam.facing); }} className="rounded-full bg-orange-500 px-3 py-1 font-semibold text-black">Try again</button>
-                  <label className="cursor-pointer rounded-full bg-neutral-700 px-3 py-1 text-neutral-100">Import photo<input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
+              <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-black/80 p-3.5 text-center backdrop-blur-xl" onPointerDown={(e) => e.stopPropagation()}>
+                <p className="text-[13px] leading-snug text-white/85">{error || cam.error}</p>
+                <div className="mt-3 flex justify-center gap-2">
+                  <button onClick={() => { setError(""); cam.setError(""); startCamera(cam.facing); }} className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-black">Try again</button>
+                  <label className="cursor-pointer rounded-full bg-white/12 px-4 py-1.5 text-[13px] font-medium">Import a photo<input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
                 </div>
               </div>
             )}
-            {view === "camera" && (
-              <>
-                <div className="absolute bottom-2 left-2 flex gap-1 rounded-full bg-black/60 p-1 text-[11px]" onPointerDown={(e) => e.stopPropagation()}>
+
+            {view === "camera" && cam.live && (
+              <div className="absolute inset-x-0 bottom-3 flex justify-center" onPointerDown={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-0.5 rounded-full bg-black/40 p-1 backdrop-blur-md">
                   {cam.lenses.map((l) => (
-                    <button key={l.id} onClick={() => cam.useLens(l.id)} className={`rounded-full px-2.5 py-1 ${cam.lensId === l.id ? "bg-white text-black" : "text-neutral-200"}`}>{l.label}</button>
+                    <button key={l.id} onClick={() => { tap(); cam.useLens(l.id); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${cam.lensId === l.id ? "bg-white/15 text-[var(--accent)]" : "text-white/75"}`}>{l.label}</button>
                   ))}
+                  <span className="mx-0.5 h-3.5 w-px bg-white/15" />
                   {[1, 2, 3].map((z) => (
-                    <button key={z} onClick={() => setZoom(z)} className={`rounded-full px-2.5 py-1 ${Math.abs(zoom - z) < 0.15 ? "bg-orange-500 text-black" : "text-neutral-200"}`}>{z}×</button>
+                    <button key={z} onClick={() => { tap(); setZoom(z); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold tabular-nums transition-colors ${Math.abs(zoom - z) < 0.15 ? "bg-white/15 text-[var(--accent)]" : "text-white/75"}`}>{z}×</button>
                   ))}
                 </div>
-                <div className="absolute right-2 top-2 flex flex-col gap-1.5 text-[10px]" onPointerDown={(e) => e.stopPropagation()}>
-                  <label className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/55 backdrop-blur" aria-label="Import photo"><I n="image" className="h-4 w-4" /><input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
-                  <button aria-label="LCD overlay" className="lcd flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-[9px] backdrop-blur" onClick={() => setLcd(lcd === "off" ? "shoot" : lcd === "shoot" ? "play" : "off")}>{lcd === "off" ? "LCD" : lcd === "shoot" ? "REC" : "PLY"}</button>
-                </div>
-              </>
+              </div>
             )}
           </div>
         </div>
       </div>
 
       {view === "camera" && (
-        <div className="shrink-0 pb-1 pt-4">
-          <div className="relative flex items-center justify-center px-12">
+        <div className="shrink-0">
+          <div className="pt-2.5"><CameraCarousel items={carouselItems} value={camId} onPick={setCamId} /></div>
+
+          <button onClick={() => { setShelfTab("cams"); setShelf(true); }} className="mt-2 flex w-full flex-col items-center px-10">
             <AnimatePresence mode="wait" initial={false}>
-              <motion.div key={camDef.preset.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.14 }} className="min-w-0 text-center">
-                <div className="truncate text-sm font-semibold">{camDef.preset.name}</div>
-                <div className="lcd truncate text-[9px] text-neutral-500">{camDef.brand.toUpperCase()} {camDef.model}{film ? ` · ${film.name}` : ""}</div>
-              </motion.div>
+              <motion.span key={camDef.preset.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={fade} className="max-w-full truncate text-[15px] font-semibold tracking-[-0.01em]">
+                {camDef.preset.name}
+              </motion.span>
             </AnimatePresence>
-            <motion.button whileTap={{ scale: 0.9 }} aria-label="Looks, film and effects" onClick={() => { setShelfTab("style"); setShelf(true); }} className="absolute right-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10"><I n="sliders" className="h-[18px] w-[18px]" /></motion.button>
+            <span className="mt-0.5 max-w-full truncate text-[11px] text-white/40">
+              {camDef.brand} {camDef.model}{film ? ` · ${film.name}` : ""}
+            </span>
+          </button>
+
+          <div className="flex h-7 items-center justify-center px-6">
+            {mode === "portrait" && (
+              <label className="flex w-full max-w-[260px] items-center gap-3 text-[11px] text-white/50">
+                <span>Blur</span>
+                <input aria-label="Portrait blur" type="range" min={0} max={1} step={0.02} value={portraitBlur} onChange={(e) => setPortraitBlur(+e.target.value)} className="flex-1 accent-[var(--accent)]" />
+              </label>
+            )}
+            {mode === "night" && <p className="text-[11px] text-white/45">Blends 8 frames. Hold still.</p>}
+            {mode === "timelapse" && (
+              <div className="flex items-center gap-1.5 text-[11px] text-white/45">Every
+                {TL_INTERVALS.map((n) => <button key={n} disabled={recording} onClick={() => setTlInterval(n)} className={seg(tlInterval === n)}>{n}s</button>)}
+              </div>
+            )}
+            {mode === "booth" && (
+              <div className="flex items-center gap-1.5 text-[11px] text-white/45">4 shots
+                {([["strip", "Strip"], ["grid", "2×2"]] as const).map(([k, l]) => <button key={k} onClick={() => setBoothLayout(k)} className={seg(boothLayout === k)}>{l}</button>)}
+              </div>
+            )}
+            {mode === "pro" && <button onClick={() => setProSheet(true)} className={seg(false)}>Manual controls</button>}
           </div>
-          <CameraCarousel items={carouselItems} value={camId} onPick={(id) => setCamId(id)} />
 
-          <div className="min-h-[18px] px-4 text-center">
-            {mode === "portrait" && <label className="flex items-center gap-3 text-[11px] text-neutral-400"><span>Blur</span><input type="range" min={0} max={1} step={0.02} value={portraitBlur} onChange={(e) => setPortraitBlur(+e.target.value)} className="flex-1 accent-orange-500" /></label>}
-            {mode === "night" && <p className="text-[11px] text-neutral-500">Combines 8 frames. Hold still for a second.</p>}
-            {mode === "timelapse" && <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-400">Every {TL_INTERVALS.map((n) => <button key={n} disabled={recording} onClick={() => setTlInterval(n)} className={chip(tlInterval === n)}>{n}s</button>)}</div>}
-            {mode === "booth" && <div className="flex items-center justify-center gap-2 text-[11px] text-neutral-400">4 photos, one card {([["strip", "Strip"], ["grid", "2×2"]] as const).map(([k, l]) => <button key={k} onClick={() => setBoothLayout(k)} className={chip(boothLayout === k)}>{l}</button>)}</div>}
-            {mode === "pro" && <button onClick={() => setProSheet(true)} className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium">Manual controls</button>}
-          </div>
+          <ModeDial mode={mode} onChange={setMode} disabled={recording || !!busy || boothStep > 0} />
 
-          <div className="pt-1"><ModeDial mode={mode} onChange={setMode} disabled={recording || !!busy || boothStep > 0} /></div>
-
-          <div className="flex items-center justify-between px-8 pb-3 pt-1">
-            <div className="flex w-14 justify-start">
-              {last ? (
-                <motion.button key={last.id} initial={{ scale: 0.6, rotate: -8 }} animate={{ scale: 1, rotate: 0 }} transition={spring} onClick={() => setView("roll")} aria-label="Open roll" className="h-12 w-12 overflow-hidden rounded-xl ring-1 ring-white/25">
-                  {last.kind === "photo" ? <img src={last.url} alt="Last shot" className="h-full w-full object-cover" /> : <video src={last.url} muted className="h-full w-full object-cover" />}
-                </motion.button>
-              ) : <div className="h-12 w-12 rounded-xl bg-white/5 ring-1 ring-white/10" />}
+          <div className="flex items-center justify-between px-9 pb-1.5 pt-1.5">
+            <div className="flex w-[52px] justify-start">
+              <AnimatePresence mode="popLayout" initial={false}>
+                {last ? (
+                  <motion.button key={last.id} initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} transition={snappy}
+                    onClick={() => setView("roll")} aria-label="Open your roll" className="h-[50px] w-[50px] overflow-hidden rounded-[13px] hair">
+                    {last.kind === "photo" ? <img src={last.url} alt="" className="h-full w-full object-cover" /> : <video src={last.url} muted className="h-full w-full object-cover" />}
+                  </motion.button>
+                ) : (
+                  <motion.span key="empty" exit={{ opacity: 0 }} className="h-[50px] w-[50px] rounded-[13px] bg-white/[0.04] hair" />
+                )}
+              </AnimatePresence>
             </div>
-            <Shutter video={isVideoMode} recording={recording} countdown={countdown} disabled={!!busy} onPress={onShutter} />
-            <div className="flex w-14 justify-end">
-              <motion.button whileTap={{ scale: 0.88, rotate: 180 }} onClick={() => (cam.live ? cam.flip() : startCamera(cam.facing === "user" ? "environment" : "user"))} aria-label="Flip camera" className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10"><I n="flip" className="h-6 w-6" /></motion.button>
+            <Shutter video={isVideoMode} recording={recording} busy={!!busy} onPress={onShutter} />
+            <div className="flex w-[52px] justify-end">
+              <motion.button whileTap={{ scale: 0.88, rotate: 180 }} transition={snappy}
+                onClick={() => { tap(); cam.live ? cam.flip() : startCamera(cam.facing === "user" ? "environment" : "user"); }}
+                aria-label="Switch camera" className="flex h-[50px] w-[50px] items-center justify-center rounded-full bg-white/[0.09] text-white">
+                <I n="flip" className="h-[22px] w-[22px]" />
+              </motion.button>
             </div>
           </div>
         </div>
       )}
 
       {view !== "camera" && (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={view} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className={view === "roll" ? "min-h-full" : ""}>
-              {view === "gallery" && (
+            <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={fade} className="min-h-full">
+              {view === "studio" && (
                 <Gallery items={galleryItems} selectedId={camId} favs={favs}
                   onPick={(id) => { setCamId(id); setView("camera"); }}
                   onFav={(id) => setFavs((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))}
-                  onEdit={(id) => openBuilder(id)} onNew={() => openBuilder()} />
+                  onEdit={(id) => openBuilder(id)} onNew={() => openBuilder()} onShare={() => setView("share")} />
               )}
               {view === "builder" && dr.draft && (
                 <Builder draft={dr.draft} saved={myLooks.some((l) => l.id === dr.draft!.id)} templates={PRESETS}
                   commit={dr.commit} undo={dr.undo} redo={dr.redo} canUndo={dr.canUndo} canRedo={dr.canRedo}
-                  onCompare={setCompare} onSave={saveDraft} onDelete={deleteDraft} onShare={() => { saveDraft(false); setView("share"); }} onClose={() => { dr.open(null); setView("gallery"); }} />
+                  onCompare={setCompare} onSave={saveDraft} onDelete={deleteDraft} onShare={() => { saveDraft(false); setView("share"); }} />
               )}
               {view === "roll" && <Roll shots={shots} onShare={share} onDelete={deleteShot} onCamera={() => setView("camera")} />}
               {view === "share" && (
-                <ShareSheet looks={myLooks} focusId={dr.draft?.id ?? (myLooks.some((l) => l.id === camId) ? camId : undefined)} camLive={cam.live} startCamera={() => startCamera(cam.facing)} getFrame={getFrame} onImport={importLook} shots={shots} onReceiveFile={receiveFile} />
+                <ShareSheet looks={myLooks} focusId={dr.draft?.id ?? (myLooks.some((l) => l.id === camId) ? camId : undefined)} camLive={cam.live}
+                  startCamera={() => startCamera(cam.facing)} getFrame={getFrame} onImport={importLook} shots={shots} onReceiveFile={receiveFile} onClose={() => setView("studio")} />
               )}
             </motion.div>
           </AnimatePresence>
         </div>
       )}
 
-      <AnimatePresence>{toast && <motion.div key="toast" role="status" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }} transition={spring} className="fixed inset-x-0 bottom-24 z-[70] mx-auto w-fit rounded-full bg-white px-4 py-2 text-xs font-semibold text-black shadow-lg">{toast}</motion.div>}</AnimatePresence>
+      <AnimatePresence>
+        {toast && (
+          <motion.div key={toast} role="status" initial={{ y: 14, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 8, opacity: 0 }} transition={snappy}
+            className="pointer-events-none fixed inset-x-0 bottom-[86px] z-[70] mx-auto w-fit max-w-[88%] rounded-full bg-white/95 px-4 py-2 text-[13px] font-semibold text-black shadow-xl backdrop-blur">
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <Nav view={view} disabled={recording || !!busy || boothStep > 0} onChange={(v) => { if (v === "builder") { if (!dr.draft) openBuilder(); else setView("builder"); } else setView(v); }} />
+      <Nav view={view} disabled={recording || !!busy || boothStep > 0}
+        onChange={(v) => { if (v === "studio" && view === "builder") return; setView(v); }} />
 
       <Sheet open={shelf} onClose={() => setShelf(false)} title="Camera shelf">
-        <div className="flex gap-2 px-4 pb-3 pt-1">
+        <div className="mx-4 mb-4 flex rounded-xl bg-white/[0.07] p-[3px]">
           {([["cams", "Cameras"], ["film", "Film"], ["style", "Style"]] as const).map(([k, l]) => (
-            <button key={k} onClick={() => setShelfTab(k)} className="relative rounded-full px-4 py-1.5 text-xs font-semibold">
-              {shelfTab === k && <motion.span layoutId="shelf-pill" className="absolute inset-0 rounded-full bg-white" transition={spring} />}
-              <span className={`relative ${shelfTab === k ? "text-black" : "text-neutral-400"}`}>{l}</span>
+            <button key={k} onClick={() => { tap(); setShelfTab(k); }} className="relative flex-1 rounded-[9px] py-1.5 text-[13px] font-medium">
+              {shelfTab === k && <motion.span layoutId="shelf-seg" className="absolute inset-0 rounded-[9px] bg-white/[0.14]" style={{ boxShadow: "0 1px 3px rgba(0,0,0,.4)" }} transition={smooth} />}
+              <span className={`relative ${shelfTab === k ? "text-white" : "text-white/55"}`}>{l}</span>
             </button>
           ))}
         </div>
+
         {shelfTab === "cams" && (
-          <div className="space-y-4">
-            <div className="flex gap-4 overflow-x-auto px-4">
-              {["All", ...(myLooks.length ? ["My Looks"] : []), ...BRANDS].map((b) => <button key={b} onClick={() => setBrand(b)} className={`shrink-0 text-sm ${brand === b ? "font-semibold text-orange-400" : "text-neutral-400"}`}>{b}</button>)}
+          <div className="space-y-5">
+            <div className="flex gap-4 overflow-x-auto px-4 pb-1">
+              {["All", ...(myLooks.length ? ["My Looks"] : []), ...BRANDS].map((b) => (
+                <button key={b} onClick={() => setBrand(b)} className={`shrink-0 whitespace-nowrap text-[13px] font-medium transition-colors ${brand === b ? "text-[var(--accent)]" : "text-white/45"}`}>{b}</button>
+              ))}
             </div>
             {rows.map(({ row, items }) => (
-              <div key={row}>
-                <h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">{row === "Mine" ? "My Looks" : row}</h3>
-                <div className="grid grid-cols-3 gap-2 px-4">
+              <section key={row}>
+                <h3 className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">{row === "Mine" ? "My Looks" : row}</h3>
+                <div className="grid grid-cols-3 gap-2.5 px-4">
                   {items.map((c) => (
-                    <button key={c.preset.id} onClick={() => { setCamId(c.preset.id); setShelf(false); }} className="text-center" title={c.preset.blurb}>
-                      <div className={`h-[72px] rounded-xl bg-neutral-900 p-1 ring-1 transition ${c.preset.id === camId ? "ring-orange-500" : "ring-white/5"}`}><CameraIcon body={c.body} color={c.color} /></div>
-                      <div className="mt-1 truncate text-[11px] font-medium text-neutral-200">{c.preset.name}</div>
-                      <div className="truncate text-[10px] text-neutral-500">{c.brand} {c.model}</div>
+                    <button key={c.preset.id} onClick={() => { tap(); setCamId(c.preset.id); setShelf(false); }} className="text-center" title={c.preset.blurb}>
+                      <div className={`rounded-2xl bg-white/[0.05] p-2 transition-shadow ${c.preset.id === camId ? "shadow-[inset_0_0_0_1.5px_var(--accent)]" : "hair"}`}>
+                        <div className="h-[52px]"><CameraIcon body={c.body} color={c.color} /></div>
+                      </div>
+                      <div className="mt-1.5 truncate text-[12px] font-medium">{c.preset.name}</div>
+                      <div className="truncate text-[10px] text-white/35">{c.brand} {c.model}</div>
                     </button>
                   ))}
                 </div>
-              </div>
+              </section>
             ))}
           </div>
         )}
-        {shelfTab === "film" && (<div><p className="px-4 pb-1 text-xs text-neutral-500">Swipe to load a film. It replaces the camera&apos;s colour.</p><FilmCarousel value={filmId} onPick={(f) => setFilmId(f?.id ?? null)} /></div>)}
+
+        {shelfTab === "film" && (
+          <div>
+            <p className="px-4 pb-2 text-[13px] text-white/45">Film replaces the camera&apos;s colour and keeps its lens character.</p>
+            <FilmCarousel value={filmId} onPick={(f) => setFilmId(f?.id ?? null)} />
+          </div>
+        )}
+
         {shelfTab === "style" && (
-          <div className="space-y-5">
-            <label className="mx-4 flex items-center gap-3 text-xs text-neutral-400">Strength
-              <input aria-label="Intensity" type="range" min={0} max={1} step={0.01} value={intensity} onChange={(e) => setIntensity(+e.target.value)} className="flex-1 accent-orange-500" />
-              <span className="w-8 text-right tabular-nums">{Math.round(intensity * 100)}</span>
-            </label>
-            <div><h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Timestamp</h3>
-              <div className="flex gap-2 overflow-x-auto px-4 pb-1">{STAMPS.map((s) => <button key={s.id} onClick={() => setStamp(s.id)} className={chip(stamp === s.id)} title={s.sample}>{s.label}</button>)}</div></div>
-            <div><h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Effects</h3>
-              <div className="flex gap-2 overflow-x-auto px-4 pb-1">{EFFECTS.filter((e) => e.id !== "frame").map((e) => (
-                <button key={e.id} onClick={() => setEffects((s) => { const n = new Set(s); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); return n; })} className={chip(effects.has(e.id))}>{e.label}</button>))}</div></div>
-            <div><h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Frame</h3>
-              <div className="flex gap-2 overflow-x-auto px-4 pb-1">{([["auto", "Camera default"], ["none", "None"], ["polaroid", "Polaroid"], ["thin", "Thin"], ["rounded", "Rounded"], ["film", "Film strip"]] as const).map(([k, l]) => <button key={k} onClick={() => setFrameId(k)} className={chip(frameId === k)}>{l}</button>)}</div></div>
-            <div><h3 className="px-4 pb-1.5 text-[11px] uppercase tracking-wider text-neutral-500">Watermark</h3>
-              <div className="flex gap-2 overflow-x-auto px-4 pb-1">{WATERMARKS.map((w) => <button key={w.id} onClick={() => setWmId(w.id)} className={chip(wmId === w.id)}>{w.label}</button>)}</div>
-              {wmId === "custom" && <input value={wmText} onChange={(e) => setWmText(e.target.value)} maxLength={40} placeholder="Your watermark text" className="mx-4 mt-2 w-[calc(100%-2rem)] rounded-lg bg-neutral-800 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-orange-500" />}</div>
+          <div className="space-y-6">
+            <div className="px-4">
+              <div className="flex items-baseline justify-between pb-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">Strength</span>
+                <span className="text-[13px] tabular-nums text-white/55">{Math.round(intensity * 100)}%</span>
+              </div>
+              <input aria-label="Strength" type="range" min={0} max={1} step={0.01} value={intensity} onChange={(e) => setIntensity(+e.target.value)} className="w-full accent-[var(--accent)]" />
+            </div>
+            {([
+              ["Timestamp", STAMPS.map((s) => [s.id, s.label] as const), stamp, (v: string) => setStamp(v)],
+              ["Frame", [["auto", "Camera default"], ["none", "None"], ["polaroid", "Polaroid"], ["thin", "Thin"], ["rounded", "Rounded"], ["film", "Film strip"]] as const, frameId, (v: string) => setFrameId(v as typeof frameId)],
+              ["Watermark", WATERMARKS.map((w) => [w.id, w.label] as const), wmId, (v: string) => setWmId(v as WatermarkId)],
+              ["Screen", [["off", "Off"], ["shoot", "Shooting"], ["play", "Playback"]] as const, lcd, (v: string) => setLcd(v as LcdMode)],
+            ] as [string, readonly (readonly [string, string])[], string, (v: string) => void][]).map(([title, opts, cur, set]) => (
+              <section key={title}>
+                <h3 className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">{title}</h3>
+                <div className="flex gap-2 overflow-x-auto px-4 pb-1">
+                  {opts.map(([id, label]) => <button key={id} onClick={() => { tap(); set(id); }} className={chip(cur === id)}>{label}</button>)}
+                </div>
+                {title === "Watermark" && wmId === "custom" && (
+                  <input value={wmText} onChange={(e) => setWmText(e.target.value)} maxLength={40} placeholder="Your watermark text"
+                    className="mx-4 mt-2.5 w-[calc(100%-2rem)] rounded-xl bg-white/[0.07] px-3.5 py-2.5 text-[15px] outline-none placeholder:text-white/30 focus:ring-2 focus:ring-[var(--accent)]" />
+                )}
+              </section>
+            ))}
+            <section>
+              <h3 className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">Extra effects</h3>
+              <div className="flex gap-2 overflow-x-auto px-4 pb-1">
+                {EFFECTS.filter((e) => e.id !== "frame").map((e) => (
+                  <button key={e.id} onClick={() => { tap(); setEffects((s) => { const n = new Set(s); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); return n; }); }} className={chip(effects.has(e.id))}>{e.label}</button>
+                ))}
+              </div>
+            </section>
+            <div className="px-4">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/[0.07] py-3 text-[15px] font-medium">
+                <I n="image" className="h-[18px] w-[18px]" /> Import a photo
+                <input type="file" accept="image/*" hidden onChange={(e) => { importFile(e.target.files?.[0]); setShelf(false); }} />
+              </label>
+            </div>
           </div>
         )}
       </Sheet>
 
       <Sheet open={proSheet} onClose={() => setProSheet(false)} title="Manual controls">
-        <section className="space-y-3 px-4">
+        <div className="space-y-4 px-4">
           <div className="flex gap-2">
             <button className={chip(pro.look)} onClick={() => setPro({ ...pro, look: !pro.look })}>Camera look {pro.look ? "on" : "off"}</button>
-            <button className={chip(false)} onClick={() => setPro({ ...PRO_DEFAULT, look: pro.look })}>Reset</button>
+            <button className={chip(false)} onClick={() => setPro({ ...PRO_DEFAULT, look: pro.look })}>Reset all</button>
           </div>
           {PRO_CONTROLS.map((c) => (
-            <label key={c.key} className="flex items-center gap-3 text-xs text-neutral-300">
-              <span className="w-20">{c.label}</span>
-              <input type="range" min={c.min} max={c.max} step={c.step} value={pro[c.key]} onChange={(e) => setPro({ ...pro, [c.key]: +e.target.value })} className="flex-1 accent-orange-500" />
-              <span className="w-10 text-right tabular-nums">{pro[c.key].toFixed(2)}</span>
-            </label>
+            <div key={c.key}>
+              <div className="flex items-baseline justify-between pb-1">
+                <span className="text-[13px] text-white/70">{c.label}</span>
+                <span className="text-[13px] tabular-nums text-white/45">{pro[c.key].toFixed(2)}</span>
+              </div>
+              <input aria-label={c.label} type="range" min={c.min} max={c.max} step={c.step} value={pro[c.key]} onChange={(e) => setPro({ ...pro, [c.key]: +e.target.value })} className="w-full accent-[var(--accent)]" />
+            </div>
           ))}
-        </section>
+        </div>
       </Sheet>
     </main>
   );

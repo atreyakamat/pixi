@@ -1,52 +1,53 @@
+// Walks the whole app the way a person would: Studio -> Build -> save -> shelf -> film -> Share.
 import puppeteer from "puppeteer-core";
 const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"] });
 const p = await b.newPage(); await p.setViewport({ width: 420, height: 950 });
 const errs=[]; p.on("pageerror", e=>errs.push("PE "+e)); p.on("console", m=>{ if(m.type()==="error") errs.push(m.text()); });
+await p.evaluateOnNewDocument(()=>localStorage.setItem("pixi:onboarded","1"));
 await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" });
-const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); await sleep(3000);
-const clickT = (t, sel="button")=>p.evaluate((t,sel)=>{ const el=[...document.querySelectorAll(sel)].find(b=>b.textContent.trim()===t||b.getAttribute("aria-label")===t); el?.click(); return !!el; },t,sel);
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); await sleep(4000);
+const clickT=(t)=>p.evaluate((t)=>{const el=[...document.querySelectorAll("button")].find(b=>b.textContent.trim()===t||b.getAttribute("aria-label")===t); el?.click(); return !!el;},t);
+const clickS=(t)=>p.evaluate((t)=>{const el=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith(t)); el?.click(); return !!el;},t);
+const switches=()=>p.evaluate(()=>document.querySelectorAll('button[role="switch"]').length);
+const setVal=(sel,v)=>p.evaluate((sel,v)=>{const i=document.querySelector(sel); const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set; s.call(i,v); i.dispatchEvent(new Event("input",{bubbles:true}));},sel,v);
 const R = {};
-// Gallery
-await clickT("Looks"); await sleep(6000);
+
+await clickT("Studio"); await sleep(6000);
 R.tiles = await p.evaluate(()=>document.querySelectorAll("section .grid > div").length);
-R.thumbsLoaded = await p.evaluate(()=>[...document.querySelectorAll("section .grid img")].filter(i=>i.src.startsWith("data:image")).length);
-await p.screenshot({ path: "/tmp/m_gallery.png" });
-// Edit a tile -> builder
-await p.evaluate(()=>document.querySelector('button[aria-label^="Edit Birch Sun"]').click()); await sleep(1500);
-R.builderLayers = await p.evaluate(()=>document.querySelectorAll('button[role="switch"]').length);
-// add a layer
-await clickT("+ Add layer"); await sleep(300);
-await p.evaluate(()=>[...document.querySelectorAll("button")].find(b=>b.textContent.startsWith("Scanlines")).click()); await sleep(600);
-R.afterAdd = await p.evaluate(()=>document.querySelectorAll('button[role="switch"]').length);
-await clickT("Undo"); await sleep(400);
-R.afterUndo = await p.evaluate(()=>document.querySelectorAll('button[role="switch"]').length);
-await clickT("Redo"); await sleep(400);
-R.afterRedo = await p.evaluate(()=>document.querySelectorAll('button[role="switch"]').length);
-// slider tweak on open layer
-await p.evaluate(()=>{ const r=document.querySelector('input[type="range"]'); const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set; set.call(r, r.max); r.dispatchEvent(new Event("input",{bubbles:true})); }); await sleep(500);
-// name + save
-await p.evaluate(()=>{ const i=document.querySelector('input[placeholder="Name your look"]'); const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set; set.call(i,"Goa Sunset"); i.dispatchEvent(new Event("input",{bubbles:true})); }); await sleep(300);
-await clickT("Save to My Looks"); await sleep(800);
+R.thumbs = await p.evaluate(()=>[...document.querySelectorAll("section .grid img")].filter(i=>i.src.startsWith("data:image")).length);
+await p.screenshot({ path: "/tmp/m_studio.png" });
+
+await p.evaluate(()=>document.querySelector('button[aria-label^="Edit Birch Sun"]').click()); await sleep(1800);
+R.builderLayers = await switches();
+await clickT("Add a layer"); await sleep(500);
+await clickS("Scanlines"); await sleep(700);
+R.afterAdd = await switches();
+await clickT("Undo"); await sleep(500); R.afterUndo = await switches();
+await clickT("Redo"); await sleep(500); R.afterRedo = await switches();
+await p.evaluate(()=>{const r=document.querySelector('section input[type="range"]'); const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set; s.call(r,r.max); r.dispatchEvent(new Event("input",{bubbles:true}));}); await sleep(500);
+await setVal('input[placeholder="Name your look"]',"Goa Sunset"); await sleep(400);
+await clickT("Save to My Looks"); await sleep(1000);
 R.toast = await p.evaluate(()=>document.querySelector('[role="status"]')?.textContent);
-await p.screenshot({ path: "/tmp/m_builder.png", fullPage: false });
-// guide
-await clickT("Guide"); await sleep(300); R.guide = await p.evaluate(()=>!!document.querySelector('[role="dialog"]')); await clickT("Got it");
-// persisted
+await p.screenshot({ path: "/tmp/m_build.png" });
+await clickT("Guide"); await sleep(600); R.guide = await p.evaluate(()=>!!document.querySelector('[role="dialog"]')); await clickT("Got it"); await sleep(500);
 R.stored = await p.evaluate(()=>JSON.parse(localStorage.getItem("pixi:looks:v1")||"[]").map(l=>l.name));
-// camera view shows My Looks + film carousel
-await clickT("Camera"); await sleep(800);
-R.myRow = await p.evaluate(()=>document.body.textContent.includes("My Looks") && document.body.textContent.includes("Goa Sunset"));
-R.film = await p.evaluate(()=>document.body.textContent.includes("Film roll"));
-// scroll the carousel to 3rd canister
-await p.evaluate(()=>{ const c=document.querySelector('div.snap-x'); c.scrollTo({left: 3*124, behavior:"auto"}); }); await sleep(4000);
+
+await clickT("Close"); await sleep(600); await clickT("Camera"); await sleep(1200);
+await p.evaluate(()=>document.querySelector('[aria-label="Looks, film and effects"]').click()); await sleep(900);
+await clickT("Cameras"); await sleep(900);
+R.myRow = await p.evaluate(()=>{const d=document.querySelector('[role="dialog"]').innerText; return d.includes("My Looks") && d.includes("Goa Sunset");});
+await clickT("Film"); await sleep(900);
+await p.evaluate(()=>{const c=[...document.querySelectorAll('[role="dialog"] div.snap-x')].pop(); c.scrollTo({left:3*124,behavior:"auto"});}); await sleep(3000);
 R.filmApplied = await p.evaluate(()=>JSON.parse(localStorage.getItem("pixi:v2")).filmId);
-await p.evaluate(()=>document.querySelector('div.snap-x').scrollIntoView({block:"center"})); await sleep(300);
 await p.screenshot({ path: "/tmp/m_film.png" });
-// Share
-await clickT("Share"); await sleep(9000);
+await p.keyboard.press("Escape"); await clickT("Camera"); await sleep(600);
+
+await clickT("Studio"); await sleep(1500);
+await clickT("Share and receive looks"); await sleep(3000);
 R.qr = await p.evaluate(()=>!!document.querySelector('img[alt="QR code for this look"]'));
+R.nearby = await p.evaluate(()=>document.body.innerText.includes("Send photos nearby"));
 await p.screenshot({ path: "/tmp/m_share.png" });
-// paste import of the code
-const code = await p.evaluate(async()=>{ await new Promise(r=>setTimeout(r,200)); return null; });
-console.log(JSON.stringify(R,null,1)); console.log("errors:", JSON.stringify(errs.slice(0,5)));
+
+console.log(JSON.stringify(R,null,1));
+console.log("errors:", JSON.stringify(errs));
 await b.close();

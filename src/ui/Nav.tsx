@@ -1,18 +1,23 @@
 "use client";
 import { motion } from "framer-motion";
 import { I, type IconName } from "./icons";
+import { smooth, tap } from "./motion";
 
-export type View = "camera" | "gallery" | "builder" | "roll" | "share";
-const TABS: [View, string, IconName][] = [["camera", "Camera", "camera"], ["gallery", "Looks", "looks"], ["builder", "Build", "build"], ["roll", "Roll", "roll"], ["share", "Share", "share"]];
+export type View = "camera" | "studio" | "builder" | "roll" | "share";
+const TABS: [View, string, IconName][] = [["camera", "Camera", "camera"], ["studio", "Studio", "looks"], ["roll", "Roll", "roll"]];
 
 export function Nav({ view, onChange, disabled }: { view: View; onChange: (v: View) => void; disabled?: boolean }) {
+  const on = (v: View) => view === v || (v === "studio" && (view === "builder" || view === "share"));
   return (
-    <nav aria-label="Main" className="relative z-30 flex shrink-0 border-t border-white/10 bg-black/90 safe-b backdrop-blur">
+    <nav aria-label="Main" className="relative z-30 flex shrink-0 justify-center gap-2 border-t border-white/[0.07] bg-black/80 px-6 pt-1.5 backdrop-blur-xl safe-b">
       {TABS.map(([v, label, icon]) => (
-        <button key={v} aria-current={view === v ? "page" : undefined} disabled={disabled} onClick={() => onChange(v)} className="relative flex flex-1 flex-col items-center gap-0.5 pb-2 pt-2.5">
-          {view === v && <motion.span layoutId="nav-dot" className="absolute top-0 h-[3px] w-8 rounded-b-full bg-orange-500" transition={{ type: "spring", stiffness: 500, damping: 34 }} />}
-          <motion.span animate={{ scale: view === v ? 1.1 : 1, y: view === v ? -1 : 0 }} className={view === v ? "text-orange-400" : "text-neutral-500"}><I n={icon} className="h-[22px] w-[22px]" /></motion.span>
-          <span className={`text-[10px] font-medium ${view === v ? "text-orange-400" : "text-neutral-500"}`}>{label}</span>
+        <button key={v} aria-current={on(v) ? "page" : undefined} disabled={disabled}
+          onClick={() => { tap(); onChange(v); }}
+          className="group flex flex-1 flex-col items-center gap-[3px] pb-1.5 pt-1 disabled:opacity-40">
+          <motion.span animate={{ scale: on(v) ? 1 : 0.94 }} transition={smooth} className={on(v) ? "text-[var(--accent)]" : "text-white/40"}>
+            <I n={icon} className="h-[23px] w-[23px]" w={1.7} />
+          </motion.span>
+          <span className={`text-[10px] font-medium tracking-[0.01em] ${on(v) ? "text-[var(--accent)]" : "text-white/40"}`}>{label}</span>
         </button>
       ))}
     </nav>

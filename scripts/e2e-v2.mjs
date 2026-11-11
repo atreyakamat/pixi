@@ -15,9 +15,9 @@ await clickBtn(/take photo/); await sleep(6000);
 out.afterPhoto = await rollInfo();
 // persistence across reload
 await p.reload({ waitUntil: "domcontentloaded" }); await sleep(6000);
-await clickBtn(/open roll/); await sleep(1200);
+await clickBtn(/open your roll/i); await sleep(1500);
 out.rollTilesAfterReload = await p.evaluate(() => document.querySelectorAll("img").length);
-await clickBtn(/^camera$/); await sleep(1500);
+await clickBtn(/^Camera$/); await sleep(1500);
 // background / foreground cycle
 await p.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, get: () => true }); document.dispatchEvent(new Event("visibilitychange")); });
 await sleep(800);
@@ -34,7 +34,7 @@ out.lrName = await p.evaluate(() => document.body.innerText.includes("Pixel Phon
 await clickBtn(/take photo/); await sleep(7000);
 const afterLr = await rollInfo(); out.lrPhoto = afterLr[afterLr.length - 1] ?? null; out.rollCount = afterLr.length;
 // booth
-await clickBtn(/^booth$/); await sleep(800);
+await clickBtn(/^Booth$/); await sleep(900);
 await clickBtn(/take photo/);
 await sleep(30000);
 const afterBooth = await rollInfo(); out.boothCount = afterBooth.length; out.boothImg = afterBooth.find(i => i.h > i.w * 2) ?? null;
