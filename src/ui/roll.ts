@@ -14,11 +14,23 @@ export interface RollItem {
   exported?: boolean;
 }
 
-interface Schema extends DBSchema { roll: { key: string; value: RollItem; indexes: { created: number } } }
+/** A deleted shot, kept for a while so one mis-tap is not the end of it. */
+export interface TrashItem extends RollItem { binned: number }
+
+interface Schema extends DBSchema {
+  roll: { key: string; value: RollItem; indexes: { created: number } };
+  trash: { key: string; value: TrashItem; indexes: { binned: number } };
+}
+
+/** How long a deleted shot stays recoverable. */
+export const TRASH_DAYS = 30;
 
 let dbp: Promise<IDBPDatabase<Schema>> | null = null;
-const db = () => (dbp ??= openDB<Schema>("pixi", 1, {
-  upgrade(d) { d.createObjectStore("roll", { keyPath: "id" }).createIndex("created", "created"); },
+const db = () => (dbp ??= openDB<Schema>("pixi", 2, {
+  upgrade(d, from) {
+    if (from < 1) d.createObjectStore("roll", { keyPath: "id" }).createIndex("created", "created");
+    if (from < 2) d.createObjectStore("trash", { keyPath: "id" }).createIndex("binned", "binned");
+  },
 }));
 
 /** Builds a small preview so the Roll grid stays light however many shots are stored. */
@@ -83,8 +95,53 @@ export async function markExported(id: string) {
   } catch { /* ignore */ }
 }
 
+/**
+ * Moves a shot to the bin rather than destroying it. Thirty days later it goes for good, which is
+ * swept up here rather than on a timer, so closing the app never leaves work half done.
+ */
 export async function rollDelete(id: string): Promise<void> {
-  try { await (await db()).delete("roll", id); } catch { /* ignore */ }
+  try {
+    const d = await db();
+    const cur = await d.get("roll", id);
+    if (cur) await d.put("trash", { ...cur, binned: Date.now() });
+    await d.delete("roll", id);
+    void purgeOldTrash();
+  } catch { /* ignore */ }
+}
+
+export async function trashAll(): Promise<TrashItem[]> {
+  try { return (await (await db()).getAllFromIndex("trash", "binned")).reverse(); } catch { return []; }
+}
+
+/** Puts a binned shot back in the roll, where it keeps its original date. */
+export async function trashRestore(id: string): Promise<RollItem | undefined> {
+  try {
+    const d = await db();
+    const cur = await d.get("trash", id);
+    if (!cur) return undefined;
+    const item = { ...cur }; delete (item as Partial<typeof cur>).binned;
+    await d.put("roll", item);
+    await d.delete("trash", id);
+    return item;
+  } catch { return undefined; }
+}
+
+export async function trashDrop(id: string): Promise<void> {
+  try { await (await db()).delete("trash", id); } catch { /* ignore */ }
+}
+
+export async function trashEmpty(): Promise<void> {
+  try { await (await db()).clear("trash"); } catch { /* ignore */ }
+}
+
+async function purgeOldTrash() {
+  try {
+    const d = await db();
+    const cutoff = Date.now() - TRASH_DAYS * 86_400_000;
+    const old = await d.getAllKeysFromIndex("trash", "binned", IDBKeyRange.upperBound(cutoff));
+    const tx = d.transaction("trash", "readwrite");
+    await Promise.all([...old.map((k) => tx.store.delete(k)), tx.done]);
+  } catch { /* ignore */ }
 }
 
 /** Rough number of bytes the roll is holding, for the Settings screen. */
@@ -96,5 +153,20 @@ export async function rollSize(): Promise<{ count: number; bytes: number }> {
 }
 
 export async function rollClear(): Promise<void> {
-  try { await (await db()).clear("roll"); } catch { /* ignore */ }
+  try { const d = await db(); await d.clear("roll"); await d.clear("trash"); } catch { /* ignore */ }
+}
+
+/** Adds shots from a backup. Ids already in the roll are left as they are; returns how many landed. */
+export async function rollImportMany(items: RollItem[]): Promise<number> {
+  let n = 0;
+  try {
+    const d = await db();
+    for (const it of items) {
+      if (await d.getKey("roll", it.id)) continue;
+      const thumb = it.kind === "photo" ? await makeThumb(it.blob) : undefined;
+      await d.put("roll", { ...it, thumb, exported: false });
+      n++;
+    }
+  } catch { /* quota */ }
+  return n;
 }

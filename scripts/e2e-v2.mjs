@@ -11,7 +11,7 @@ await p.evaluateOnNewDocument(() => localStorage.setItem("pixi:onboarded", "1"))
 await p.goto(URL, { waitUntil: "domcontentloaded" });
 await sleep(6000);
 out.live1 = await p.evaluate(() => { const v = document.querySelector("body > video"); return !!v && v.videoWidth > 0; });
-await clickBtn(/take photo/); await sleep(6000);
+await clickBtn(/take photo/); await sleep(9000);
 out.afterPhoto = await rollInfo();
 // persistence across reload
 await p.reload({ waitUntil: "domcontentloaded" }); await sleep(6000);

@@ -16,7 +16,7 @@ await click(/^Roll$/); await s(1500);
 await click(/^Select$/); await s(600);
 await p.evaluate(()=>{[...document.querySelectorAll('button[aria-label^="Select photo"]')].slice(0,3).forEach(b=>b.click());}); await s(700);
 out.selected = await p.evaluate(()=>document.body.innerText.match(/(\d+) selected/)?.[1]);
-await click(/^Make a strip$/); await s(5000);
+await click(/^Build with/); await s(5000);
 out.onBuild = await p.evaluate(()=>document.body.innerText.includes("Build"));
 out.filledChips = await p.evaluate(()=>[...document.querySelectorAll('button[aria-label^="Window"] img')].length);
 // change frame

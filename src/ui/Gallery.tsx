@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import type { Preset } from "@/engine/types";
 import { thumbFor } from "./thumbs";
 import { I } from "./icons";
@@ -8,9 +8,20 @@ import { press, smooth, snappy, tap } from "./motion";
 
 export interface GalleryItem { preset: Preset; maker: string; mine: boolean }
 
-function Tile({ it, selected, fav, onPick, onFav, onEdit }: { it: GalleryItem; selected: boolean; fav: boolean; onPick: () => void; onFav: () => void; onEdit: () => void }) {
+function Tile({ it, selected, fav, onPick, onFav, onEdit, onHold }: { it: GalleryItem; selected: boolean; fav: boolean; onPick: () => void; onFav: () => void; onEdit: () => void; onHold: (src: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [src, setSrc] = useState<string | null>(null);
+  // Press and hold to see a look big before committing to it. A hold that turns into a scroll is
+  // not a hold, so any movement cancels it.
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const stopHold = () => { if (hold.current) clearTimeout(hold.current); hold.current = null; };
+  const startHold = () => {
+    held.current = false;
+    stopHold();
+    hold.current = setTimeout(() => { if (src) { held.current = true; tap(12); onHold(src); } }, 420);
+  };
+  useEffect(() => stopHold, []);
   useEffect(() => {
     const el = ref.current; if (!el) return;
     let dead = false;
@@ -23,8 +34,12 @@ function Tile({ it, selected, fav, onPick, onFav, onEdit }: { it: GalleryItem; s
 
   return (
     <div ref={ref} className="relative">
-      <motion.button whileTap={press} transition={snappy} onClick={() => { tap(); onPick(); }} aria-label={`Use ${it.preset.name}`}
-        className="block w-full overflow-hidden rounded-[18px] bg-white/[0.05]">
+      <motion.button whileTap={press} transition={snappy}
+        onClick={() => { if (held.current) { held.current = false; return; } tap(); onPick(); }}
+        onPointerDown={startHold} onPointerUp={stopHold} onPointerLeave={stopHold} onPointerCancel={stopHold} onPointerMove={stopHold}
+        onContextMenu={(e) => e.preventDefault()}
+        aria-label={`Use ${it.preset.name}`}
+        className="block w-full touch-manipulation select-none overflow-hidden rounded-[18px] bg-white/[0.05]">
         <div className="relative aspect-[3/4] w-full">
           {src
             ? <motion.img src={src} alt="" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="h-full w-full object-cover" />
@@ -55,6 +70,7 @@ export function Gallery({ items, selectedId, favs, recentIds, onPick, onFav, onE
 }) {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState("All");
+  const [peek, setPeek] = useState<{ src: string; name: string; maker: string } | null>(null);
   const makers = useMemo(() => ["All", ...(recentIds.length >= 3 ? ["Most used"] : []), "Favourites", ...(items.some((i) => i.mine) ? ["My Looks"] : []), ...Array.from(new Set(items.filter((i) => !i.mine).map((i) => i.maker)))], [items, recentIds.length]);
   const SPECIAL = ["All", "Most used", "Favourites", "My Looks"];
   let list = items.filter((i) => {
@@ -99,10 +115,28 @@ export function Gallery({ items, selectedId, favs, recentIds, onPick, onFav, onE
         <div className="grid grid-cols-2 gap-3 px-4">
           {list.map((it) => (
             <Tile key={it.preset.id} it={it} selected={it.preset.id === selectedId} fav={favs.includes(it.preset.id)}
-              onPick={() => onPick(it.preset.id)} onFav={() => onFav(it.preset.id)} onEdit={() => onEdit(it.preset.id)} />
+              onPick={() => onPick(it.preset.id)} onFav={() => onFav(it.preset.id)} onEdit={() => onEdit(it.preset.id)}
+              onHold={(src) => setPeek({ src, name: it.preset.name, maker: it.maker })} />
           ))}
         </div>
       )}
+
+      <AnimatePresence>
+        {peek && (
+          <motion.div key="peek" role="dialog" aria-label={`${peek.name} preview`}
+            className="fixed inset-0 z-[65] flex flex-col items-center justify-center bg-black/92 px-6 backdrop-blur-sm"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            onClick={() => setPeek(null)}>
+            <motion.img src={peek.src} alt="" initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} transition={smooth}
+              className="max-h-[70vh] w-full max-w-[430px] rounded-[20px] object-contain shadow-[0_20px_60px_rgba(0,0,0,.8)]" />
+            <div className="pt-4 text-center">
+              <div className="text-[19px] font-semibold">{peek.name}</div>
+              <div className="text-[13px] text-white/45">{peek.maker}</div>
+              <div className="pt-3 text-[12px] text-white/30">Tap anywhere to close</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

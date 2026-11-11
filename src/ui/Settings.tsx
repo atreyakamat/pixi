@@ -1,10 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { I } from "./icons";
 import { press, smooth, snappy, tap } from "./motion";
 import { DEFAULTS, type Settings as S } from "./settings";
 import { rollClear, rollSize } from "./roll";
+import { backupRoll, keepStorage, restoreRoll, storageEstimate } from "./backup";
+import { exportDocument } from "./native";
 import { isNative } from "./native";
 
 const mb = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
@@ -53,8 +55,34 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
   );
 }
 
-export function SettingsScreen({ settings, setSettings, onClose, onCleared }: { settings: S; setSettings: (s: S) => void; onClose: () => void; onCleared: () => void }) {
+export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRestored, say }: { settings: S; setSettings: (s: S) => void; onClose: () => void; onCleared: () => void; onRestored: () => void; say: (m: string) => void }) {
   const [use, setUse] = useState<{ count: number; bytes: number } | null>(null);
+  const [kept, setKept] = useState<boolean | null>(null);
+  const [quota, setQuota] = useState<{ used: number; quota: number } | null>(null);
+  const [busy, setBusy] = useState("");
+  const restoreRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { keepStorage().then(setKept); storageEstimate().then(setQuota); }, []);
+
+  const backup = async () => {
+    if (busy) return;
+    tap(); setBusy("Packing…");
+    try {
+      const zip = await backupRoll((d, t) => setBusy(`Packing ${d}/${t}…`));
+      const r = await exportDocument(zip, `pixi-backup-${new Date().toISOString().slice(0, 10)}.zip`);
+      say(r.ok ? (r.where === "files" ? "Backup saved to Documents/Pixi" : "Backup downloaded") : r.reason);
+    } catch { say("Could not make the backup."); }
+    setBusy("");
+  };
+  const restore = async (f: File | undefined) => {
+    if (!f || busy) return;
+    setBusy("Restoring…");
+    try {
+      const r = await restoreRoll(f, (d, t) => setBusy(`Restoring ${d}/${t}…`));
+      say(r.reason ?? `Restored ${r.added} ${r.added === 1 ? "shot" : "shots"}${r.skipped ? `, skipped ${r.skipped}` : ""}`);
+      if (r.added) { onRestored(); rollSize().then(setUse); }
+    } catch { say("Could not read that backup."); }
+    setBusy("");
+  };
   const [confirm, setConfirm] = useState(false);
   const set = <K extends keyof S>(k: K, v: S[K]) => setSettings({ ...settings, [k]: v });
   useEffect(() => { rollSize().then(setUse); }, []);
@@ -94,6 +122,9 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared }: { 
         </Group>
 
         <Group title="Feel">
+          <Row label="Develop each shot" sub="The photo comes up slowly, the way an instant print does">
+            <Toggle on={settings.develop} onChange={(v) => set("develop", v)} label="Develop each shot" />
+          </Row>
           <Row label="Tap feedback" sub="A short buzz when you press a control">
             <Toggle on={settings.haptics} onChange={(v) => set("haptics", v)} label="Tap feedback" />
           </Row>
@@ -107,9 +138,17 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared }: { 
           <button onClick={() => { tap(); setConfirm(true); }} className="w-full px-4 py-3 text-left text-[15px] text-[#ff453a]">Empty the roll…</button>
         </Group>
 
+        <Group title="Keep it safe" note={kept === false ? "This browser may clear Pixi's storage when space runs low. A backup is the only copy you control." : "Your roll is marked as persistent, so the system should not clear it. A backup is still the only copy you control."}>
+          <Row label="Protected storage" sub={kept === null ? "Checking…" : kept ? "On" : "Not granted by this browser"} />
+          {quota && quota.quota > 0 && <Row label="Space" sub={`${mb(quota.used)} used of ${mb(quota.quota)} available to Pixi`} />}
+          <button onClick={backup} disabled={!!busy} className="w-full px-4 py-3 text-left text-[15px] text-[var(--accent)] disabled:opacity-50">{busy || "Back up the roll (zip)…"}</button>
+          <button onClick={() => { tap(); restoreRef.current?.click(); }} disabled={!!busy} className="w-full px-4 py-3 text-left text-[15px] text-[var(--accent)] disabled:opacity-50">Restore from a backup…</button>
+          <input ref={restoreRef} type="file" accept=".zip,application/zip" className="hidden" aria-label="Choose a Pixi backup" onChange={(e) => { void restore(e.target.files?.[0]); e.target.value = ""; }} />
+        </Group>
+
         <Group title="About">
           <Row label="Pixi" sub={isNative() ? "Android app" : "Web app"} />
-          <Row label="Where your photos go" sub="Everything is made on this phone. Pixi has no account and uploads nothing." />
+          <Row label="Free. On-device. No account." sub="Every look is rendered on this phone. Pixi has no server, no sign-in and no analytics, so your photos never leave the phone unless you share them." />
         </Group>
       </div>
 

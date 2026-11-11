@@ -31,14 +31,19 @@ export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onI
   const [msg, setMsg] = useState("");
   const done = useRef(false);
 
-  useEffect(() => { if (focusId) setSel(focusId); }, [focusId]);
+  // A new focus from outside replaces the selection; the sheet is keyed on it by the caller as well.
+  const [seenFocus, setSeenFocus] = useState(focusId);
+  if (focusId !== seenFocus) { setSeenFocus(focusId); if (focusId) setSel(focusId); }
 
   useEffect(() => {
     const l = looks.find((x) => x.id === sel);
-    setQr(""); setCode(""); setNote("");
-    if (!l) return;
     let dead = false;
     (async () => {
+      // Clearing after a tick keeps the previous code on screen until the new one is ready, with no synchronous setState in the effect.
+      await Promise.resolve();
+      if (dead) return;
+      setQr(""); setCode(""); setNote("");
+      if (!l) return;
       const c = await encodeLook(l);
       if (dead) return;
       setCode(c);

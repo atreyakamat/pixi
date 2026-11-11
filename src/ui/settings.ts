@@ -6,13 +6,15 @@ export interface Settings {
   format: "jpeg" | "png";
   quality: number;
   haptics: boolean;
+  /** Watch a photo come up after the shutter, the way an instant print does. */
+  develop: boolean;
   /** Export photobooth strips as two copies side by side, the way a real booth prints them. */
   stripPair: boolean;
   /** Cap on how many shots Pixi keeps on the phone. Oldest go first. */
   rollLimit: number;
 }
 
-export const DEFAULTS: Settings = { saveMode: "auto", format: "jpeg", quality: 0.92, haptics: true, stripPair: false, rollLimit: 500 };
+export const DEFAULTS: Settings = { saveMode: "auto", format: "jpeg", quality: 0.92, haptics: true, develop: true, stripPair: false, rollLimit: 500 };
 const KEY = "pixi:settings:v1";
 
 export function loadSettings(): Settings {
@@ -25,6 +27,7 @@ export function loadSettings(): Settings {
       format: v.format === "png" ? "png" : "jpeg",
       quality: typeof v.quality === "number" && v.quality >= 0.5 && v.quality <= 1 ? v.quality : DEFAULTS.quality,
       haptics: v.haptics !== false,
+      develop: v.develop !== false,
       stripPair: v.stripPair === true,
       rollLimit: typeof v.rollLimit === "number" && v.rollLimit >= 50 && v.rollLimit <= 5000 ? v.rollLimit : DEFAULTS.rollLimit,
     };
@@ -38,6 +41,7 @@ export function persistSettings(s: Settings) {
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULTS);
   const [ready, setReady] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is read after mount so hydration matches
   useEffect(() => { setSettings(loadSettings()); setReady(true); }, []);
   useEffect(() => { if (ready) persistSettings(settings); }, [settings, ready]);
   return { settings, setSettings };

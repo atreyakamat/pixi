@@ -13,6 +13,16 @@ const cameraError = (e: unknown): string => {
 };
 
 /** Owns the camera stream: start, flip, lens switch and torch. The hidden <video> is read by the render loop. */
+function ensureVideo(ref: { current: HTMLVideoElement | null }): HTMLVideoElement {
+  if (ref.current) return ref.current;
+  const v = document.createElement("video");
+  v.setAttribute("playsinline", ""); v.setAttribute("autoplay", ""); v.muted = true;
+  v.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0";
+  document.body.appendChild(v);
+  ref.current = v;
+  return v;
+}
+
 export function useCamera() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -48,14 +58,7 @@ export function useCamera() {
     for (const c of attempts) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia(c);
-        let v = videoRef.current;
-        if (!v) {
-          v = document.createElement("video");
-          v.setAttribute("playsinline", ""); v.setAttribute("autoplay", ""); v.muted = true;
-          v.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0";
-          document.body.appendChild(v);
-          videoRef.current = v;
-        }
+        const v = ensureVideo(videoRef);
         v.srcObject = stream;
         await v.play();
         streamRef.current = stream;

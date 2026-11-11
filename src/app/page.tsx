@@ -1,17 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RetroRenderer, type LcdMode } from "@/engine/renderer";
 import { BRANDS, CAMERAS, EFFECTS, STAMPS, cameraFromPreset, withEffects, withFilm, type EffectId } from "@/ui/cameras";
 import { Builder } from "@/ui/Builder";
 import { Gallery, type GalleryItem } from "@/ui/Gallery";
 import { FilmCarousel } from "@/ui/FilmCarousel";
-import { isNative, saveMessage, saveToGallery, shareOrSave } from "@/ui/native";
-import { makeThumb, markExported, rollAdd, rollAll, rollDelete } from "@/ui/roll";
+import { isNative, saveMessage, saveToGallery, shareFiles, shareOrSave } from "@/ui/native";
+import { makeThumb, markExported, rollAdd, rollAll, rollDelete, trashAll, trashDrop, trashEmpty, trashRestore } from "@/ui/roll";
 import { ShareSheet } from "@/ui/ShareSheet";
 import { AnimatePresence, motion } from "framer-motion";
 import { I, type IconName } from "@/ui/icons";
-import { PixiMark } from "@/ui/Logo";
 import { Splash } from "@/ui/Splash";
 import { Onboarding } from "@/ui/Onboarding";
 import { Shutter } from "@/ui/Shutter";
@@ -19,13 +18,18 @@ import { ModeDial } from "@/ui/ModeDial";
 import { CameraCarousel } from "@/ui/CameraCarousel";
 import { Sheet } from "@/ui/Sheet";
 import { Nav, type View } from "@/ui/Nav";
-import { Roll } from "@/ui/Roll";
-import { StripStudio } from "@/ui/StripStudio";
+import { Roll, type BinnedShot } from "@/ui/Roll";
+import { BuildStudio } from "@/ui/BuildStudio";
+import { DevelopCard } from "@/ui/Develop";
+import { layoutToBlob, renderLayout } from "@/ui/layouts";
+import { layoutById } from "@/ui/layoutTemplates";
 import { SettingsScreen } from "@/ui/Settings";
+import { keepStorage } from "@/ui/backup";
+import { canMakeClip, makeDevelopClip } from "@/ui/developClip";
+import { acceptMedia } from "@/ui/media";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
-import { ext as extOf, useSettings } from "@/ui/settings";
+import { ext as extOf, mime as mimeOf, useSettings } from "@/ui/settings";
 import { noteUse, topUsed } from "@/ui/recent";
-import { composeBooth, type BoothLayout } from "@/ui/booth";
 import { fade, press, smooth, snappy, tap } from "@/ui/motion";
 import { FILMS } from "@/presets/films";
 import { useDraft } from "@/ui/useDraft";
@@ -34,7 +38,7 @@ import { PRESETS } from "@/presets";
 import { CameraIcon } from "@/ui/CameraIcon";
 import { sampleScene } from "@/ui/sampleScene";
 import { useCamera } from "@/ui/useCamera";
-import { MODES, PRO_CONTROLS, PRO_DEFAULT, applyMode, type ModeId, type ProState } from "@/ui/modes";
+import { PRO_CONTROLS, PRO_DEFAULT, applyMode, type ModeId, type ProState } from "@/ui/modes";
 import { WATERMARKS, watermarkOverlays, type WatermarkId } from "@/ui/watermarks";
 import { encodeTimelapse } from "@/ui/timelapse";
 
@@ -57,6 +61,8 @@ const GRIDS = [
   { id: "diag", label: "Grid diagonal" },
 ];
 const TIMERS = [0, 3, 5, 10];
+/** Frames the booth can shoot straight into. Every one of these holds four photos. */
+const BOOTH_FRAMES: [string, string][] = [["st-classic", "Strip"], ["st-grid", "2×2"], ["st-film", "Film"], ["st-theater", "Ticket"]];
 const TL_INTERVALS = [1, 2, 5, 10, 30];
 const MAX_TL_FRAMES = 600;
 
@@ -84,14 +90,6 @@ function GridOverlay({ id }: { id: string }) {
   );
 }
 
-const Icon = ({ d, className = "h-5 w-5" }: { d: string; className?: string }) => (
-  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={d} /></svg>
-);
-const ICON = {
-  bolt: "M13 2 4 14h7l-1 8 9-12h-7l1-8Z",
-  flip: "M4 8V5h3M20 16v3h-3M5 8a8 8 0 0 1 14-2M19 16a8 8 0 0 1-14 2",
-};
-
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
@@ -111,13 +109,16 @@ export default function Home() {
   const cam = useCamera();
 
   const [view, setView] = useState<View>("camera");
-  viewRef.current = view;
   const [myLooks, setMyLooks] = useState<SavedLook[]>([]);
   const [looksReady, setLooksReady] = useState(false);
   const [favs, setFavs] = useState<string[]>([]);
   const [filmId, setFilmId] = useState<string | null>(null);
   const [compare, setCompare] = useState(false);
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<{ msg: string; act?: { label: string; run: () => void } } | null>(null);
+  /** One way to talk to the person. An action turns the toast into an offer rather than a dead end. */
+  const say = useCallback((msg: string, act?: { label: string; run: () => void }) => setToast(msg ? { msg, act } : null), []);
+  const [dev, setDev] = useState<{ id: string; url: string } | null>(null);
+  const [trash, setTrash] = useState<BinnedShot[]>([]);
   const dr = useDraft();
   const [camId, setCamId] = useState(CAMERAS[0].preset.id);
   const [effects, setEffects] = useState<Set<EffectId>>(new Set());
@@ -127,14 +128,12 @@ export default function Home() {
   const [shelfTab, setShelfTab] = useState<"cams" | "film" | "style">("cams");
   const [proSheet, setProSheet] = useState(false);
   const [frameId, setFrameId] = useState<"auto" | "none" | "polaroid" | "thin" | "rounded" | "film">("auto");
-  const [boothLayout, setBoothLayout] = useState<BoothLayout>("strip");
+  const [boothLayout, setBoothLayout] = useState("st-classic");
   const [boothStep, setBoothStep] = useState(0);
   const [snap, setSnap] = useState(0);
   const [boot, setBoot] = useState<"splash" | "onboard" | "ready">("splash");
   const [stripSeed, setStripSeed] = useState<string[]>([]);
   const { settings, setSettings } = useSettings();
-  bootRef.current = boot;
-  sheetRef.current = shelf || proSheet;
   const [lcd, setLcd] = useState<LcdMode>("off");
   const [intensity, setIntensity] = useState(1);
   const [mode, setMode] = useState<ModeId>("photo");
@@ -160,6 +159,7 @@ export default function Home() {
   const [flash, setFlash] = useState(false);
   const [ring, setRing] = useState<{ x: number; y: number; k: number } | null>(null);
   const [fit, setFit] = useState({ w: 300, h: 400 });
+  const clipOk = useMemo(() => typeof window !== "undefined" && canMakeClip(), []);
 
   const allCams = useMemo(() => [...myLooks.map((l) => cameraFromPreset(lookToPreset(l))), ...CAMERAS], [myLooks]);
   const camDef = allCams.find((c) => c.preset.id === camId) ?? CAMERAS[0];
@@ -177,13 +177,18 @@ export default function Home() {
   }, [camDef, film, effects, stamp, mode, pro, focus, portraitBlur, wmId, wmText, frameId, building, dr.draft]);
 
   const optsRef = useRef({ preset, intensity, mirror: false, lcd, aspect, zoom });
-  optsRef.current = { preset, intensity: compare && building ? 0 : intensity, mirror, lcd, aspect, zoom };
+  // The render loop reads the latest values through refs; they are written after render, never during it.
+  useLayoutEffect(() => {
+    viewRef.current = view; bootRef.current = boot; sheetRef.current = shelf || proSheet;
+    optsRef.current = { preset, intensity: compare && building ? 0 : intensity, mirror, lcd, aspect, zoom };
+  });
 
-  // Restore and persist simple settings.
+  // Restore and persist simple settings. Reading localStorage must wait for mount so server and first client render match.
   useEffect(() => {
     try {
       const s = JSON.parse(localStorage.getItem("pixi:v2") ?? "{}");
       const mine = loadLooks();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMyLooks(mine); setFavs(loadFavs());
       if (s.camId && (CAMERAS.some((c) => c.preset.id === s.camId) || mine.some((l) => l.id === s.camId))) setCamId(s.camId);
       if (s.filmId && FILMS.some((f) => f.id === s.filmId)) setFilmId(s.filmId);
@@ -206,7 +211,7 @@ export default function Home() {
   }, [camId, aspectId, gridId, timerSec, wmId, wmText, stamp, filmId, frameId, boothLayout]);
   useEffect(() => { if (looksReady) persistLooks(myLooks); }, [myLooks, looksReady]);
   useEffect(() => { if (looksReady) persistFavs(favs); }, [favs, looksReady]);
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(""), 2600); return () => clearTimeout(t); }, [toast]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), toast.act ? 6000 : 2600); return () => clearTimeout(t); }, [toast]);
 
   // Fit the viewfinder box to the chosen aspect inside the available slot.
   useEffect(() => {
@@ -256,6 +261,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror follows the camera facing, which only the hook knows
   useEffect(() => { setMirror(cam.live && cam.facing === "user"); }, [cam.live, cam.facing]);
 
   // Portrait: auto-centre the focus on a detected face when the browser supports FaceDetector.
@@ -299,12 +305,12 @@ export default function Home() {
 
   // Android back button: close sheets, then return to Camera, then leave the app.
   const backRef = useRef<() => void>(() => {});
-  backRef.current = () => {
+  useLayoutEffect(() => { backRef.current = () => {
     if (proSheet) setProSheet(false);
     else if (shelf) setShelf(false);
     else if (view !== "camera") { if (view === "builder") dr.open(null); setView("camera"); }
     else void import("@capacitor/app").then(({ App }) => App.minimizeApp());
-  };
+  }; });
   useEffect(() => {
     let sub: { remove: () => Promise<void> } | undefined;
     if (!isNative()) return;
@@ -316,32 +322,74 @@ export default function Home() {
     let done = false;
     try { done = localStorage.getItem("pixi:onboarded") === "1"; } catch { /* private mode */ }
     setBoot(done ? "ready" : "onboard");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const finishOnboard = () => {
     try { localStorage.setItem("pixi:onboarded", "1"); } catch { /* ignore */ }
     setBoot("ready"); void cam.start("environment");
   };
 
-  const addShot = async (blob: Blob, kind: Shot["kind"], ext: string): Promise<Shot> => {
+  interface AddOpts { develop?: boolean; autoSave?: boolean; quiet?: boolean }
+
+  const addShot = async (blob: Blob, kind: Shot["kind"], ext: string, o: AddOpts = {}): Promise<Shot> => {
     const created = Date.now();
     const thumb = kind === "photo" ? await makeThumb(blob) : undefined;
     const item: Shot = { id: `s${created}${Math.random().toString(36).slice(2, 6)}`, url: URL.createObjectURL(thumb ?? blob), kind, ext, blob, created };
     setShots((s) => [item, ...s]);
-    if (kind === "photo") setSnap((n) => n + 1);
-    const r = await rollAdd({ id: item.id, kind, ext, blob, thumb, created, camera: camDef.model }, { autoSave: settings.saveMode === "auto", limit: settings.rollLimit });
+    if (kind === "photo") {
+      setSnap((n) => n + 1);
+      if (o.develop !== false && settings.develop) setDev({ id: item.id, url: item.url });
+    }
+    const autoSave = o.autoSave ?? settings.saveMode === "auto";
+    const r = await rollAdd({ id: item.id, kind, ext, blob, thumb, created, camera: camDef.model }, { autoSave, limit: settings.rollLimit });
+    if (o.quiet) return item;
     if (r.save) {
-      setToast(saveMessage(r.save));
-      if (r.save.ok) setShots((s) => s.map((x) => (x.id === item.id ? { ...x, exported: true } : x)));
-    } else setToast(r.stored ? "Kept in Pixi" : "Could not keep that shot. Storage may be full.");
+      if (r.save.ok) { say(saveMessage(r.save)); setShots((s) => s.map((x) => (x.id === item.id ? { ...x, exported: true } : x))); }
+      // Some phones will not let any app write to the gallery. The share sheet always can, so the
+      // photo is never stranded: it is already safe in Pixi, and this is the way out to anywhere else.
+      else say(r.save.reason, { label: "Share", run: () => void shareOrSave(blob, `pixi-${created}.${ext}`) });
+    } else say(r.stored ? "Kept in Pixi" : "Could not keep that shot. Storage may be full.");
     return item;
   };
-  const deleteShot = async (s: Shot) => { URL.revokeObjectURL(s.url); setShots((x) => x.filter((y) => y.id !== s.id)); await rollDelete(s.id); };
 
-  // Load saved shots on launch so nothing is lost when the app is closed.
-  useEffect(() => {
+  /** Deleting puts a shot in the bin for thirty days, so one mis-tap is not final. */
+  const deleteShot = async (s: Shot) => {
+    URL.revokeObjectURL(s.url);
+    setShots((x) => x.filter((y) => y.id !== s.id));
+    await rollDelete(s.id);
+    setTrash(await trashAll());
+  };
+
+  const restoreShot = async (id: string) => {
+    const back = await trashRestore(id);
+    setTrash(await trashAll());
+    if (!back) return;
+    setShots((x) => [{ ...back, url: URL.createObjectURL(back.thumb ?? back.blob) }, ...x].sort((a, b) => b.created - a.created));
+    say("Back in your roll");
+  };
+
+  /** Photos already on the phone. Pixi lays them out; it does not need to have taken them. */
+  const importPhotos = async (files: FileList | null) => {
+    const list = Array.from(files ?? []).slice(0, 24);
+    if (!list.length) return;
+    say(list.length === 1 ? "Adding a photo…" : `Adding ${list.length} photos…`);
+    let ok = 0;
+    for (const f of list) {
+      // Trust the bytes, not the name: a renamed file is retyped or refused here.
+      const m = await acceptMedia(f);
+      if (!m) continue;
+      try { await addShot(m.blob, m.kind, m.ext, { develop: false, autoSave: false, quiet: true }); ok++; }
+      catch { /* skip anything the phone will not decode */ }
+    }
+    say(ok ? `${ok} added to your roll` : "Those files could not be opened");
+  };
+
+  // Load saved shots on launch so nothing is lost when the app is closed. Also used after a restore.
+  const loadRoll = useCallback(() => {
     rollAll().then((items) => setShots((cur) => [...cur, ...items.filter((i) => !cur.some((c) => c.id === i.id)).map((i) => ({ ...i, url: URL.createObjectURL(i.thumb ?? i.blob) }))]));
+    trashAll().then(setTrash);
+    void keepStorage();
   }, []);
+  useEffect(() => { loadRoll(); }, [loadRoll]);
 
   const startCamera = async (facing: "user" | "environment") => { const ok = await cam.start(facing); if (ok) setError(""); };
 
@@ -447,18 +495,27 @@ export default function Home() {
     return true;
   };
 
+  /** Four shots straight into the chosen frame. What comes out is the same object Build makes. */
   const runBooth = async () => {
     const frames: ImageBitmap[] = [];
+    const tpl = layoutById(boothLayout);
+    const n = Math.min(tpl.slots.length, 4);
     try {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < n; i++) {
         setBoothStep(i + 1);
         if (!(await runCountdown(i === 0 ? 3 : 2))) return;
-        setSnap((n) => n + 1);
+        setSnap((n2) => n2 + 1);
+        setFlash(true); await sleep(120); setFlash(false);
         frames.push(await createImageBitmap(canvasRef.current!));
-        await sleep(300);
+        await sleep(260);
       }
       setBusy("Making your strip…");
-      await addShot(await composeBooth(frames, boothLayout, camDef.model), "photo", "jpg");
+      const c = document.createElement("canvas");
+      renderLayout(c, {
+        template: tpl, scale: tpl.exportScale ?? 2, pair: settings.stripPair,
+        photos: frames.map((f) => ({ src: f, w: f.width, h: f.height })),
+      });
+      await addShot(await layoutToBlob(c, mimeOf(settings), settings.quality), "photo", extOf(settings), { develop: false });
     } finally { frames.forEach((f) => f.close()); setBoothStep(0); setBusy(""); }
   };
 
@@ -473,22 +530,44 @@ export default function Home() {
     return takePhoto();
   };
 
-  const receiveFile = (blob: Blob, name: string) => {
-    const ext = name.split(".").pop() || "jpg";
-    void addShot(blob, blob.type.startsWith("video") ? "video" : "photo", ext);
+  const receiveFile = async (blob: Blob) => {
+    const m = await acceptMedia(blob);
+    if (!m) { say("That file was not a photo or video, so it was not kept."); return; }
+    void addShot(m.blob, m.kind, m.ext);
   };
 
   const share = async (s: Shot) => { await shareOrSave(s.blob, `pixi-${s.created}.${s.ext}`); };
-
-  const saveShot = async (s: Shot) => {
-    setToast("Saving…");
-    const r = await saveToGallery(s.blob, `pixi-${s.created}.${s.ext}`, s.kind);
-    setToast(saveMessage(r));
-    if (r.ok) { await markExported(s.id); setShots((x) => x.map((y) => (y.id === s.id ? { ...y, exported: true } : y))); }
+  /** A six-second clip of the photo developing, straight to the share sheet. */
+  const clipShot = async (s: Shot) => {
+    if (busy) return;
+    setBusy("Developing your clip…");
+    try {
+      const r = await makeDevelopClip(s.blob, (p) => setBusy(`Developing your clip… ${Math.round(p * 100)}%`));
+      setBusy("");
+      if (!r) { say("This phone cannot record video from the app."); return; }
+      const res = await shareOrSave(r.blob, `pixi-develop-${s.created}.${r.ext}`);
+      if (!res.ok) say(res.reason);
+    } catch { setBusy(""); say("Could not make the clip."); }
   };
 
-  /** A finished strip becomes a shot of its own, so it lives in the roll like anything else. */
-  const exportStrip = async (blob: Blob, extension: string) => { await addShot(blob, "photo", extension); setView("roll"); };
+  const saveShot = async (s: Shot) => {
+    say("Saving…");
+    const r = await saveToGallery(s.blob, `pixi-${s.created}.${s.ext}`, s.kind);
+    if (r.ok) { say(saveMessage(r)); await markExported(s.id); setShots((x) => x.map((y) => (y.id === s.id ? { ...y, exported: true } : y))); }
+    else say(r.reason, { label: "Share", run: () => void share(s) });
+  };
+
+  /** Finished pages become shots of their own, so they live in the roll like anything else. */
+  const exportPages = async (blobs: Blob[], extension: string) => {
+    for (const b of blobs) await addShot(b, "photo", extension, { develop: false, quiet: blobs.length > 1 });
+    if (blobs.length > 1) say(`${blobs.length} pages in your roll`);
+    setView("roll");
+  };
+
+  const sharePages = async (blobs: Blob[], extension: string) => {
+    const r = await shareFiles(blobs, `pixi-${Date.now()}`, extension);
+    if (!r.ok) say(r.reason);
+  };
 
   // Pinch to zoom, tap to focus.
   const onPointerDown = (e: React.PointerEvent) => {
@@ -534,15 +613,15 @@ export default function Home() {
     const d = dr.draft; if (!d) return;
     const exists = myLooks.some((l) => l.id === d.id);
     const name = d.name.trim() || `My look ${myLooks.length + 1}`;
-    if (exists && !asCopy) { setMyLooks((a) => a.map((l) => (l.id === d.id ? { ...d, name } : l))); setCamId(d.id); setToast("Saved"); return; }
+    if (exists && !asCopy) { setMyLooks((a) => a.map((l) => (l.id === d.id ? { ...d, name } : l))); setCamId(d.id); say("Saved"); return; }
     const copy: SavedLook = { ...JSON.parse(JSON.stringify(d)), id: newId(), name: asCopy ? `${name} copy` : name, created: Date.now() };
-    setMyLooks((a) => [copy, ...a]); dr.open(copy); setCamId(copy.id); setToast("Saved to My Looks");
+    setMyLooks((a) => [copy, ...a]); dr.open(copy); setCamId(copy.id); say("Saved to My Looks");
   };
   const deleteDraft = () => {
     const d = dr.draft; if (!d) return;
     setMyLooks((a) => a.filter((l) => l.id !== d.id)); setFavs((f) => f.filter((x) => x !== d.id));
     if (camId === d.id) setCamId(CAMERAS[0].preset.id);
-    dr.open(null); setView("looks"); setToast("Deleted");
+    dr.open(null); setView("looks"); say("Deleted");
   };
   const importLook = (l: SavedLook) => { setMyLooks((a) => [l, ...a]); setCamId(l.id); };
   const getFrame = (): ImageData | null => {
@@ -610,7 +689,7 @@ export default function Home() {
         <div className="relative overflow-hidden rounded-[22px] bg-[#0c0c0e] transition-[width,height] duration-300 ease-out" style={{ width: fit.w, height: fit.h }}>
           <div className="relative h-full w-full touch-none"
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
-            <canvas ref={canvasRef} className="gpu absolute inset-0 block h-full w-full" />
+            <canvas ref={canvasRef} role="img" aria-label="Live camera preview" className="gpu absolute inset-0 block h-full w-full" />
             <GridOverlay id={gridId} />
             <span className="pointer-events-none absolute inset-0 rounded-[22px] hair" />
 
@@ -644,7 +723,7 @@ export default function Home() {
 
             <AnimatePresence>
               {busy && (
-                <motion.div key="busy" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade}
+                <motion.div key="busy" role="status" aria-live="polite" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade}
                   className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-[2px]">
                   <span className="rounded-full bg-black/70 px-4 py-2 text-[13px] font-medium">{busy}</span>
                 </motion.div>
@@ -719,8 +798,9 @@ export default function Home() {
               </div>
             )}
             {mode === "booth" && (
-              <div className="flex items-center gap-1.5 text-[11px] text-white/45">4 shots
-                {([["strip", "Strip"], ["grid", "2×2"]] as const).map(([k, l]) => <button key={k} onClick={() => setBoothLayout(k)} className={seg(boothLayout === k)}>{l}</button>)}
+              <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] text-white/45" style={{ scrollbarWidth: "none" }}>
+                <span className="shrink-0">4 shots</span>
+                {BOOTH_FRAMES.map(([k, l]) => <button key={k} onClick={() => setBoothLayout(k)} className={`${seg(boothLayout === k)} shrink-0`}>{l}</button>)}
               </div>
             )}
             {mode === "pro" && <button onClick={() => setProSheet(true)} className={seg(false)}>Manual controls</button>}
@@ -744,7 +824,7 @@ export default function Home() {
             <Shutter video={isVideoMode} recording={recording} busy={!!busy} onPress={onShutter} />
             <div className="flex w-[52px] justify-end">
               <motion.button whileTap={{ scale: 0.88, rotate: 180 }} transition={snappy}
-                onClick={() => { tap(); cam.live ? cam.flip() : startCamera(cam.facing === "user" ? "environment" : "user"); }}
+                onClick={() => { tap(); if (cam.live) cam.flip(); else startCamera(cam.facing === "user" ? "environment" : "user"); }}
                 aria-label="Switch camera" className="flex h-[50px] w-[50px] items-center justify-center rounded-full bg-white/[0.09] text-white">
                 <I n="flip" className="h-[22px] w-[22px]" />
               </motion.button>
@@ -769,16 +849,25 @@ export default function Home() {
                   commit={dr.commit} undo={dr.undo} redo={dr.redo} canUndo={dr.canUndo} canRedo={dr.canRedo}
                   onCompare={setCompare} onSave={saveDraft} onDelete={deleteDraft} onShare={() => { saveDraft(false); setView("share"); }} />
               )}
-              {view === "roll" && <Roll shots={shots} onShare={share} onSave={saveShot} onDelete={deleteShot} onCamera={() => setView("camera")} onMakeStrip={(ids) => { setStripSeed(ids); setView("build"); }} />}
+              {view === "roll" && (
+                <Roll shots={shots} trash={trash} onShare={share} onSave={saveShot} onDelete={deleteShot}
+                  onCamera={() => setView("camera")} onImport={importPhotos}
+                  onMakeStrip={(ids) => { setStripSeed(ids); setView("build"); }}
+                  onRestore={restoreShot}
+                  onDrop={async (id) => { await trashDrop(id); setTrash(await trashAll()); }}
+                  onEmptyBin={async () => { await trashEmpty(); setTrash([]); say("Bin emptied"); }}
+                  onClip={clipOk ? clipShot : undefined} />
+              )}
               {view === "build" && (
-                <StripStudio roll={shots} looks={galleryItems} recentLookIds={recentIds} settings={settings}
-                  setPair={(on) => setSettings({ ...settings, stripPair: on })} seed={stripSeed}
-                  onOpenCamera={() => setView("camera")} onExport={exportStrip}
-                  onShare={async (b, n) => { await shareOrSave(b, n); }} />
+                <BuildStudio roll={shots} looks={galleryItems} recentLookIds={recentIds} settings={settings}
+                  setPair={(on: boolean) => setSettings({ ...settings, stripPair: on })} seed={stripSeed}
+                  onOpenCamera={() => setView("camera")} onImportPhotos={importPhotos}
+                  onExport={exportPages} onShare={sharePages} />
               )}
               {view === "settings" && (
                 <SettingsScreen settings={settings} setSettings={setSettings} onClose={() => setView("looks")}
-                  onCleared={() => { shots.forEach((s2) => URL.revokeObjectURL(s2.url)); setShots([]); setToast("Roll emptied"); }} />
+                  onCleared={() => { shots.forEach((s2) => URL.revokeObjectURL(s2.url)); setShots([]); setTrash([]); say("Roll emptied"); }}
+                  onRestored={loadRoll} say={say} />
               )}
               {view === "share" && (
                 <ShareSheet looks={myLooks} focusId={dr.draft?.id ?? (myLooks.some((l) => l.id === camId) ? camId : undefined)} camLive={cam.live}
@@ -791,10 +880,17 @@ export default function Home() {
       )}
 
       <AnimatePresence>
+        {dev && view === "camera" && <DevelopCard key={dev.id} src={dev.url} onDone={() => setDev(null)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {toast && (
-          <motion.div key={toast} role="status" initial={{ y: 14, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 8, opacity: 0 }} transition={snappy}
-            className="pointer-events-none fixed inset-x-0 bottom-[86px] z-[70] mx-auto w-fit max-w-[88%] rounded-full bg-white/95 px-4 py-2 text-[13px] font-semibold text-black shadow-xl backdrop-blur">
-            {toast}
+          <motion.div key={toast.msg} role="status" initial={{ y: 14, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 8, opacity: 0 }} transition={snappy}
+            className="fixed inset-x-0 bottom-[86px] z-[70] mx-auto flex w-fit max-w-[88%] items-center gap-2.5 rounded-full bg-white/95 py-2 pl-4 pr-2 text-[13px] font-semibold text-black shadow-xl backdrop-blur">
+            <span className="min-w-0 break-words">{toast.msg}</span>
+            {toast.act
+              ? <button onClick={() => { const a = toast.act!; setToast(null); a.run(); }} className="shrink-0 rounded-full bg-black px-3 py-1.5 text-[12px] font-semibold text-white">{toast.act.label}</button>
+              : <span className="w-2" />}
           </motion.div>
         )}
       </AnimatePresence>

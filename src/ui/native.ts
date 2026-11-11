@@ -106,6 +106,42 @@ export function downloadInBrowser(blob: Blob, name: string): SaveResult {
   }
 }
 
+/** Shares several files at once: a whole carousel goes to Instagram in one go. */
+export async function shareFiles(blobs: Blob[], baseName: string, extension: string): Promise<SaveResult> {
+  if (!blobs.length) return { ok: false, reason: "Nothing to share" };
+  if (blobs.length === 1) return shareOrSave(blobs[0], `${baseName}.${extension}`);
+  if (isNative()) {
+    try {
+      const uris: string[] = [];
+      for (let i = 0; i < blobs.length; i++) {
+        const f = await Filesystem.writeFile({ path: safeName(`${baseName}-${i + 1}.${extension}`), data: await toBase64(blobs[i]), directory: Directory.Cache });
+        uris.push(f.uri);
+      }
+      await Share.share({ files: uris, dialogTitle: "Share or save" });
+      return { ok: true, where: "gallery" };
+    } catch {
+      return saveAll(blobs, baseName, extension);
+    }
+  }
+  const files = blobs.map((b, i) => new File([b], safeName(`${baseName}-${i + 1}.${extension}`), { type: b.type || "image/jpeg" }));
+  try {
+    if (navigator.canShare?.({ files })) { await navigator.share({ files }); return { ok: true, where: "gallery" }; }
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") return { ok: true, where: "gallery" };
+  }
+  return saveAll(blobs, baseName, extension);
+}
+
+/** Writes every page of a carousel to the gallery, and reports the first thing that went wrong. */
+export async function saveAll(blobs: Blob[], baseName: string, extension: string): Promise<SaveResult> {
+  let last: SaveResult = { ok: false, reason: "Nothing to save" };
+  for (let i = 0; i < blobs.length; i++) {
+    last = await saveToGallery(blobs[i], `${baseName}-${i + 1}.${extension}`, "photo");
+    if (!last.ok) return last;
+  }
+  return last;
+}
+
 /** Share where the platform supports it, otherwise fall back to saving. */
 export async function shareOrSave(blob: Blob, name: string): Promise<SaveResult> {
   if (isNative()) {
@@ -124,4 +160,19 @@ export async function shareOrSave(blob: Blob, name: string): Promise<SaveResult>
 export function saveMessage(r: SaveResult): string {
   if (!r.ok) return r.reason;
   return r.where === "gallery" ? "Saved to your gallery" : r.where === "files" ? "Saved to Documents/Pixi" : "Downloaded";
+}
+
+/**
+ * A file that is not a photo (a backup zip, say): written to Documents/Pixi on the phone and offered
+ * to the share sheet, or downloaded in a browser.
+ */
+export async function exportDocument(blob: Blob, name: string): Promise<SaveResult> {
+  if (!isNative()) return downloadInBrowser(blob, name);
+  try {
+    const f = await Filesystem.writeFile({ path: `${ALBUM}/${safeName(name)}`, data: await toBase64(blob), directory: Directory.Documents, recursive: true });
+    try { await Share.share({ files: [f.uri], dialogTitle: "Share or save" }); } catch { /* person closed the sheet; the file is still in Documents */ }
+    return { ok: true, where: "files" };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error && e.message ? e.message : "Your phone would not let Pixi write the file." };
+  }
 }

@@ -18,6 +18,7 @@ interface Props {
 }
 
 type Role = "none" | "send" | "recv";
+const shotName = (ext: string) => `pixi-${Date.now()}.${ext}`;
 const ghost = "rounded-xl bg-white/[0.07] px-4 py-2.5 text-[13px] font-medium text-white/80 disabled:opacity-40";
 const pri = "flex-1 rounded-xl bg-white py-3 text-[15px] font-semibold text-black disabled:opacity-40";
 
@@ -77,7 +78,7 @@ export function NearbyPanel({ shots, camLive, startCamera, getFrame, onReceiveFi
   }, [scanning]);
 
   const sendShot = async (s: NearbyShot) => {
-    try { await nb.current?.sendFile(s.blob, `pixi-${Date.now()}.${s.ext}`); setMsg("Sent."); } catch { setMsg("Send failed."); }
+    try { await nb.current?.sendFile(s.blob, shotName(s.ext)); setMsg("Sent."); } catch { setMsg("Send failed."); }
   };
   const open = state === "open";
 

@@ -37,7 +37,8 @@ export function CameraCarousel({ items, value, onPick }: { items: CameraDef[]; v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, items.length]);
 
-  useEffect(() => { const el = ref.current; if (el) { el.scrollLeft = idxOf(value) * STEP; paint(); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- initial scroll position only
+  useEffect(() => { const el = ref.current; if (el) { el.scrollLeft = idxOf(value) * STEP; paint(); } }, []);
 
   const onScroll = () => {
     cancelAnimationFrame(raf.current);
