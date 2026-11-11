@@ -1,0 +1,16 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader"] });
+const p = await b.newPage(); await p.setViewport({ width: 390, height: 844 });
+const errs = []; p.on("pageerror", e => errs.push(String(e)));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+await p.evaluateOnNewDocument(() => localStorage.setItem("pixi:onboarded", "1"));
+await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" }); await sleep(4500);
+const click = (t) => p.evaluate((t) => [...document.querySelectorAll("button")].find(b => b.textContent.trim().startsWith(t))?.click(), t);
+await p.evaluate(() => document.querySelector('button[aria-label="Looks, film and effects"]').click()); await sleep(1200);
+await click("Film"); await sleep(1200);
+await p.evaluate(() => { const el = [...document.querySelectorAll("div")].find(d => d.className.includes("snap-x") && d.closest('[role=dialog]')); el.scrollTo({ left: 3 * 124, behavior: "auto" }); }); await sleep(1500);
+await sleep(2500);
+console.log("label:", await p.evaluate(() => document.querySelector("[role=dialog]").innerText.split("\n").slice(0,12).join(" | ")));
+console.log("filmId:", await p.evaluate(() => JSON.parse(localStorage.getItem("pixi:v2")).filmId), "errors:", JSON.stringify(errs));
+await p.screenshot({ path: "/tmp/film-sheet.png" });
+await b.close();

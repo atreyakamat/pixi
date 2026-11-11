@@ -17,7 +17,7 @@ export async function rollAdd(item: RollItem): Promise<{ saved: boolean; path?: 
   let saved = false, path: string | undefined;
   try { await (await db()).put("roll", item); saved = true; } catch { /* storage full or blocked */ }
   if (isNative()) {
-    try { path = await nativeSave(item.blob, `pixi-${item.created}.${item.ext}`); saved = true; } catch { /* permission or disk */ }
+    try { path = await nativeSave(item.blob, `pixi-${item.created}.${item.ext}`, item.kind); saved = true; } catch { /* permission or disk */ }
   }
   return { saved, path };
 }

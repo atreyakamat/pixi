@@ -284,6 +284,21 @@ export default function Home() {
     return () => clearInterval(id);
   }, [recording]);
 
+  // Android back button: close sheets, then return to Camera, then leave the app.
+  const backRef = useRef<() => void>(() => {});
+  backRef.current = () => {
+    if (proSheet) setProSheet(false);
+    else if (shelf) setShelf(false);
+    else if (view !== "camera") { if (view === "builder") dr.open(null); setView("camera"); }
+    else void import("@capacitor/app").then(({ App }) => App.minimizeApp());
+  };
+  useEffect(() => {
+    let sub: { remove: () => Promise<void> } | undefined;
+    if (!isNative()) return;
+    void import("@capacitor/app").then(({ App }) => App.addListener("backButton", () => backRef.current())).then((h) => { sub = h; });
+    return () => { void sub?.remove(); };
+  }, []);
+
   const finishSplash = useCallback(() => {
     let done = false;
     try { done = localStorage.getItem("pixi:onboarded") === "1"; } catch { /* private mode */ }
@@ -301,7 +316,7 @@ export default function Home() {
     setShots((s) => [item, ...s].slice(0, 120));
     if (kind === "photo") setSnap((n) => n + 1);
     const r = await rollAdd({ id: item.id, kind, ext, blob, created, camera: camDef.model });
-    setToast(r.saved ? (r.path ? "Saved to Documents/Pixi" : "Saved to your roll") : "Could not save. Storage may be full.");
+    setToast(r.saved ? (r.path ? (r.path === "Gallery" ? "Saved to Gallery · Pixi album" : "Saved to Documents/Pixi") : "Saved to your roll") : "Could not save. Storage may be full.");
   };
   const deleteShot = async (s: Shot) => { URL.revokeObjectURL(s.url); setShots((x) => x.filter((y) => y.id !== s.id)); await rollDelete(s.id); };
 
