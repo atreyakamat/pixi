@@ -64,8 +64,8 @@ export class RetroRenderer {
   private gl: WebGL2RenderingContext;
   private progs = new Map<string, Prog>();
   private targets: Target[] = [];
-  private srcTex: WebGLTexture;
-  private overlayTex: WebGLTexture;
+  private srcTex!: WebGLTexture;
+  private overlayTex!: WebGLTexture;
   private overlayCanvas = document.createElement("canvas");
   private overlayKey = "";
   private hasSource = false;
@@ -73,7 +73,7 @@ export class RetroRenderer {
   private srcH = 1;
   private w = 0;
   private h = 0;
-  private vao: WebGLVertexArrayObject;
+  private vao!: WebGLVertexArrayObject;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -84,7 +84,23 @@ export class RetroRenderer {
     });
     if (!gl) throw new Error("WebGL2 is not available on this device.");
     this.gl = gl;
+    this.initResources();
+    // Android WebViews drop the GL context when the app is backgrounded. Recover instead of freezing.
+    canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); this.lost = true; });
+    canvas.addEventListener("webglcontextrestored", () => { this.initResources(); this.lost = false; this.onRestored?.(); });
+  }
 
+  /** True while the GL context is gone; callers should skip rendering. */
+  lost = false;
+  onRestored?: () => void;
+
+  private initResources() {
+    const gl = this.gl;
+    this.progs.clear();
+    this.targets = [];
+    this.overlayKey = "";
+    this.hasSource = false;
+    this.w = 0; this.h = 0;
     const vao = gl.createVertexArray()!;
     gl.bindVertexArray(vao);
     const buf = gl.createBuffer()!;
@@ -231,6 +247,7 @@ export class RetroRenderer {
   }
 
   render(opts: RenderOptions, time: number) {
+    if (this.lost || this.gl.isContextLost()) return;
     if (!this.hasSource) return;
     const gl = this.gl;
     const aspect = opts.aspect ?? opts.preset?.aspect ?? 3 / 4;
