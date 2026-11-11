@@ -51,6 +51,7 @@ await p.evaluate(()=>document.querySelector('button[aria-label^="Open photo"]')?
 await click(/^Build$/); await s(2500); R.push(await audit("build")); await p.screenshot({path:"/tmp/bt-build.png"});
 for (const t of ["Frame","Look","Text"]) { await click(new RegExp("^"+t+"$")); await s(700); R.push(await audit("build-"+t.toLowerCase())); }
 await click(/^Looks$/); await s(2500); R.push(await audit("looks")); await p.screenshot({path:"/tmp/bt-looks.png"});
+await click(/^Your profile$/); await s(1500); R.push(await audit("profile")); await p.screenshot({path:"/tmp/bt-profile.png"}); await click(/^Close profile$/); await s(700);
 await click(/^Settings$/); await s(900); R.push(await audit("settings")); await p.screenshot({path:"/tmp/bt-settings.png"});
 const fails=R.filter(r=>r.bad.length);
 console.log(JSON.stringify({ screens:R.length, failing:fails },null,1)); console.log("errors:",JSON.stringify(errs));
