@@ -1,6 +1,6 @@
 import type { LayerSpec, Preset } from "@/engine/types";
 
-export type ModeId = "photo" | "portrait" | "night" | "pro" | "video" | "timelapse";
+export type ModeId = "photo" | "portrait" | "night" | "pro" | "video" | "timelapse" | "booth";
 export const MODES: { id: ModeId; label: string }[] = [
   { id: "photo", label: "Photo" },
   { id: "portrait", label: "Portrait" },
@@ -8,6 +8,7 @@ export const MODES: { id: ModeId; label: string }[] = [
   { id: "pro", label: "Pro" },
   { id: "video", label: "Video" },
   { id: "timelapse", label: "Timelapse" },
+  { id: "booth", label: "Booth" },
 ];
 
 export interface ProState {

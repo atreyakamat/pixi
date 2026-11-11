@@ -23,8 +23,10 @@ export function useCamera() {
   const [lensId, setLensId] = useState<string>("");
   const [torchOk, setTorchOk] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const wantRef = useRef<{ on: boolean; facing: "user" | "environment"; lens?: string }>({ on: false, facing: "environment" });
 
   const stop = useCallback(() => {
+    wantRef.current = { ...wantRef.current, on: false };
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -60,6 +62,8 @@ export function useCamera() {
         const track = stream.getVideoTracks()[0];
         const caps = (track.getCapabilities?.() ?? {}) as { torch?: boolean };
         setTorchOk(!!caps.torch); setTorchOn(false);
+        wantRef.current = { on: true, facing: want, lens: deviceId };
+        stream.getVideoTracks()[0].addEventListener("ended", () => { if (streamRef.current === stream) setLive(false); });
         setFacing(want); setLive(true); setError("");
         try {
           const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
@@ -82,6 +86,28 @@ export function useCamera() {
 
   const flip = useCallback(() => start(facing === "user" ? "environment" : "user"), [facing, start]);
   const useLens = useCallback((id: string) => start("environment", id), [start]);
+
+  // Release the camera when the app goes to the background and bring it back on return.
+  useEffect(() => {
+    const release = () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setLive(false); setTorchOn(false);
+    };
+    const resume = () => {
+      const w = wantRef.current;
+      if (!w.on) return;
+      const t = streamRef.current?.getVideoTracks()[0];
+      if (t && t.readyState === "live" && !t.muted) return;
+      void start(w.facing, w.lens);
+    };
+    const onVis = () => (document.hidden ? release() : resume());
+    document.addEventListener("visibilitychange", onVis);
+    let sub: { remove: () => Promise<void> } | undefined;
+    import("@capacitor/app").then(({ App }) => App.addListener("appStateChange", (st) => (st.isActive ? resume() : release()))).then((h) => { sub = h; }).catch(() => {});
+    return () => { document.removeEventListener("visibilitychange", onVis); void sub?.remove(); };
+  }, [start]);
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
