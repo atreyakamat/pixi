@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
+import { NearbyPanel, type NearbyShot } from "./NearbyPanel";
 import { decodeLook, encodeLook, type SavedLook } from "./store";
 
 interface Props {
@@ -11,9 +12,11 @@ interface Props {
   startCamera: () => void;
   getFrame: () => ImageData | null;
   onImport: (l: SavedLook) => void;
+  shots: NearbyShot[];
+  onReceiveFile: (blob: Blob, name: string) => void;
 }
 
-export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onImport }: Props) {
+export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onImport, shots, onReceiveFile }: Props) {
   const [sel, setSel] = useState(focusId ?? looks[0]?.id ?? "");
   const [code, setCode] = useState("");
   const [qr, setQr] = useState("");
@@ -94,6 +97,8 @@ export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onI
           <button className={btn} disabled={!paste.trim()} onClick={async () => { if (await importCode(paste)) setPaste(""); }}>Add</button>
         </div>
       </div>
+      <NearbyPanel shots={shots} camLive={camLive} startCamera={startCamera} getFrame={getFrame} onReceiveFile={onReceiveFile}
+        onReceiveLook={async (c) => { const l = await decodeLook(c); if (!l) return false; onImport(l); return true; }} />
       {msg && <p role="status" className="text-center text-xs text-orange-300">{msg}</p>}
     </section>
   );

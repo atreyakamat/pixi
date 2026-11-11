@@ -6,6 +6,7 @@ import { BRANDS, CAMERAS, EFFECTS, STAMPS, cameraFromPreset, withEffects, withFi
 import { Builder } from "@/ui/Builder";
 import { Gallery, type GalleryItem } from "@/ui/Gallery";
 import { FilmCarousel } from "@/ui/FilmCarousel";
+import { isNative, nativeShare } from "@/ui/native";
 import { ShareSheet } from "@/ui/ShareSheet";
 import { FILMS } from "@/presets/films";
 import { useDraft } from "@/ui/useDraft";
@@ -369,10 +370,16 @@ export default function Home() {
     return takePhoto();
   };
 
+  const receiveFile = (blob: Blob, name: string) => {
+    const ext = name.split(".").pop() || "jpg";
+    setShots((s) => [{ url: URL.createObjectURL(blob), kind: blob.type.startsWith("video") ? "video" as const : "photo" as const, ext, blob }, ...s].slice(0, 30));
+  };
+
   const share = async (s: Shot) => {
     const file = new File([s.blob], `pixi-${Date.now()}.${s.ext}`, { type: s.blob.type });
     try {
-      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
+      if (isNative()) await nativeShare(s.blob, file.name);
+      else if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
       else { const a = document.createElement("a"); a.href = s.url; a.download = file.name; a.click(); }
     } catch { /* cancelled */ }
   };
@@ -664,7 +671,7 @@ export default function Home() {
           onCompare={setCompare} onSave={saveDraft} onDelete={deleteDraft} onShare={() => { saveDraft(false); setView("share"); }} onClose={() => { dr.open(null); setView("gallery"); }} />
       )}
       {view === "share" && (
-        <ShareSheet looks={myLooks} focusId={dr.draft?.id ?? (myLooks.some((l) => l.id === camId) ? camId : undefined)} camLive={cam.live} startCamera={() => startCamera(cam.facing)} getFrame={getFrame} onImport={importLook} />
+        <ShareSheet looks={myLooks} focusId={dr.draft?.id ?? (myLooks.some((l) => l.id === camId) ? camId : undefined)} camLive={cam.live} startCamera={() => startCamera(cam.facing)} getFrame={getFrame} onImport={importLook} shots={shots} onReceiveFile={receiveFile} />
       )}
 
       {toast && <div role="status" className="fixed inset-x-0 bottom-20 z-40 mx-auto w-fit rounded-full bg-white px-4 py-2 text-xs font-semibold text-black shadow-lg">{toast}</div>}
