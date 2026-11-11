@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "build:app": "PIXI_TARGET=app next build && cap sync android",
-    "apk": "npm run build:app && cd android && ./gradlew assembleDebug"
+    "apk": "npm run build:app && cd android && ./gradlew assembleDebug",
+    "aab": "npm run build:app && cd android && ./gradlew bundleRelease",
+    "check": "tsc --noEmit && eslint src"
   },
   "dependencies": {
     "@capacitor-community/media": "^9.1.0",
