@@ -61,7 +61,7 @@ export function CameraIcon({ body, color, selected }: { body: Body; color: strin
     <svg viewBox="0 0 80 72" className="h-full w-full" aria-hidden>
       <ellipse cx="40" cy="66" rx="30" ry="3" fill="#000" opacity=".18" />
       {shape}
-      {selected && <rect x="2" y="2" width="76" height="68" rx="10" fill="none" stroke="#ff7a1a" strokeWidth="2.5" />}
+      {selected && <rect x="2" y="2" width="76" height="68" rx="10" fill="none" stroke="var(--accent)" strokeWidth="2.5" />}
     </svg>
   );
 }

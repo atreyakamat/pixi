@@ -51,8 +51,8 @@ export function Builder({ draft, saved, templates, commit, undo, redo, canUndo, 
     commit({ ...draft, layers: c.layers, overlays: c.overlays, aspect: c.aspect, blurb: t.blurb }); setOpen(0);
   };
 
-  const ghost = "shrink-0 rounded-xl bg-white/[0.07] px-3.5 py-2 text-[13px] font-medium text-white/80 active:bg-white/[0.12] disabled:opacity-30";
-  const field = "w-full rounded-xl bg-white/[0.07] px-3.5 py-3 text-[15px] outline-none placeholder:text-white/30 focus:ring-2 focus:ring-[var(--accent)]";
+  const ghost = "shrink-0 rounded-xl bg-white/[0.07] px-3.5 py-2 text-[0.8125rem] font-medium text-white/80 active:bg-white/[0.12] disabled:opacity-30";
+  const field = "w-full rounded-xl bg-white/[0.07] px-3.5 py-3 text-[0.9375rem] outline-none placeholder:text-white/30 focus:ring-2 focus:ring-[var(--accent)]";
 
   return (
     <section className="pb-28">
@@ -80,12 +80,12 @@ export function Builder({ draft, saved, templates, commit, undo, redo, canUndo, 
               <motion.div key={i} layout transition={smooth} className="overflow-hidden rounded-[18px] bg-white/[0.05]" style={isOpen ? { boxShadow: "inset 0 0 0 1.5px var(--accent)" } : undefined}>
                 <div className="flex items-center gap-3 px-3.5 py-3">
                   <button role="switch" aria-checked={on} aria-label={`${on ? "Turn off" : "Turn on"} ${help.title}`} onClick={() => { tap(); patch(i, { enabled: !on }); }}
-                    className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200 ${on ? "bg-[#30d158]" : "bg-white/15"}`}>
+                    className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200 ${on ? "bg-[var(--accent)]" : "bg-white/15"}`}>
                     <motion.span layout transition={snappy} className="absolute top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow" style={{ left: on ? 22 : 2 }} />
                   </button>
                   <button className="min-w-0 flex-1 text-left" onClick={() => { tap(); setOpen(isOpen ? null : i); }}>
-                    <div className={`truncate text-[15px] font-medium ${on ? "" : "text-white/35"}`}>{help.title}</div>
-                    <div className="text-[11px] text-white/35">{help.cat}</div>
+                    <div className={`truncate text-[0.9375rem] font-medium ${on ? "" : "text-white/35"}`}>{help.title}</div>
+                    <div className="text-[0.6875rem] text-white/35">{help.cat}</div>
                   </button>
                   <button aria-label={`Move ${help.title} up`} disabled={i === 0} className="flex h-8 w-7 items-center justify-center text-white/50 disabled:opacity-20" onClick={() => move(i, -1)}><I n="chevL" className="h-4 w-4 rotate-90" w={2.2} /></button>
                   <button aria-label={`Move ${help.title} down`} disabled={i === draft.layers.length - 1} className="flex h-8 w-7 items-center justify-center text-white/50 disabled:opacity-20" onClick={() => move(i, 1)}><I n="chevR" className="h-4 w-4 rotate-90" w={2.2} /></button>
@@ -94,14 +94,14 @@ export function Builder({ draft, saved, templates, commit, undo, redo, canUndo, 
                   {isOpen && (
                     <motion.div key="body" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={smooth} className="overflow-hidden">
                       <div className="space-y-3 border-t border-white/[0.07] px-3.5 pb-3.5 pt-3">
-                        <p className="text-[13px] leading-relaxed text-white/45">{help.help}</p>
+                        <p className="text-[0.8125rem] leading-relaxed text-white/45">{help.help}</p>
                         {def.params.map((p) => {
                           const v = l.params?.[p.key] ?? p.def;
                           return (
                             <div key={p.key}>
                               <div className="flex items-baseline justify-between pb-1">
-                                <span className="text-[13px] text-white/70">{p.label}</span>
-                                <span className="text-[13px] tabular-nums text-white/40">{Number(v.toFixed(2))}</span>
+                                <span className="text-[0.8125rem] text-white/70">{p.label}</span>
+                                <span className="text-[0.8125rem] tabular-nums text-white/40">{Number(v.toFixed(2))}</span>
                               </div>
                               <input aria-label={p.label} type="range" min={p.min} max={p.max} step={p.step} value={v} className="w-full accent-[var(--accent)]"
                                 onChange={(e) => patch(i, { params: { ...(l.params ?? {}), [p.key]: +e.target.value } }, `p${i}.${p.key}`)} />
@@ -120,24 +120,24 @@ export function Builder({ draft, saved, templates, commit, undo, redo, canUndo, 
               </motion.div>
             );
           })}
-          {draft.layers.length === 0 && <p className="rounded-[18px] bg-white/[0.05] p-6 text-center text-[15px] leading-relaxed text-white/45">No layers yet. Add one below, or start from a template.</p>}
+          {draft.layers.length === 0 && <p className="rounded-[18px] bg-white/[0.05] p-6 text-center text-[0.9375rem] leading-relaxed text-white/45">No layers yet. Add one below, or start from a template.</p>}
         </div>
 
         <div>
-          <button className="w-full rounded-xl bg-white/[0.07] py-3 text-[15px] font-semibold" onClick={() => { tap(); setAdding(!adding); }}>{adding ? "Close the layer list" : "Add a layer"}</button>
+          <button className="w-full rounded-xl bg-white/[0.07] py-3 text-[0.9375rem] font-semibold" onClick={() => { tap(); setAdding(!adding); }}>{adding ? "Close the layer list" : "Add a layer"}</button>
           <AnimatePresence initial={false}>
             {adding && (
               <motion.div key="add" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={smooth} className="overflow-hidden">
                 <div className="mt-2 space-y-4 rounded-[18px] bg-white/[0.05] p-3.5">
                   {CATS.map((c) => (
                     <div key={c}>
-                      <h3 className="pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">{c}</h3>
+                      <h3 className="pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">{c}</h3>
                       <div className="grid grid-cols-2 gap-2">
                         {(Object.keys(LAYER_HELP) as GpuLayerKind[]).filter((k) => LAYER_HELP[k].cat === c).map((k) => (
                           <button key={k} onClick={() => { if (draft.layers.length >= 24) return; tap(); set([...draft.layers, { kind: k, params: defaultParams(k) }]); setOpen(draft.layers.length); setAdding(false); }}
                             className="rounded-xl bg-white/[0.06] p-2.5 text-left active:bg-white/[0.12]">
-                            <div className="text-[13px] font-medium">{LAYER_HELP[k].title}</div>
-                            <div className="line-clamp-2 text-[11px] leading-snug text-white/40">{LAYER_HELP[k].help}</div>
+                            <div className="text-[0.8125rem] font-medium">{LAYER_HELP[k].title}</div>
+                            <div className="line-clamp-2 text-[0.6875rem] leading-snug text-white/40">{LAYER_HELP[k].help}</div>
                           </button>
                         ))}
                       </div>
@@ -153,7 +153,7 @@ export function Builder({ draft, saved, templates, commit, undo, redo, canUndo, 
           {([["Timestamp", stampId, setStamp, [["none", "None"] as const, ...(stampId === "custom" ? [["custom", "Custom"] as const] : []), ...STAMPS.filter((x) => x.overlay).map((x) => [x.id, x.label] as const)]],
              ["Frame", frameId, setFrame, FRAMES.map((f) => [f.id, f.label] as const)]] as [string, string, (v: string) => void, readonly (readonly [string, string])[]][]).map(([label, val, set2, opts]) => (
             <label key={label} className="block">
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">{label}</span>
+              <span className="mb-1.5 block text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">{label}</span>
               <div className="relative">
                 <select className={`${field} appearance-none pr-8`} value={val} onChange={(e) => set2(e.target.value)}>
                   {opts.map(([id, l]) => <option key={id} value={id} className="bg-[#1c1c1f]">{l}</option>)}
@@ -165,7 +165,7 @@ export function Builder({ draft, saved, templates, commit, undo, redo, canUndo, 
         </div>
 
         <label className="block">
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">Description</span>
+          <span className="mb-1.5 block text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">Description</span>
           <input value={draft.blurb} maxLength={120} onChange={(e) => commit({ ...draft, blurb: e.target.value }, "blurb")} placeholder="What does it feel like?" className={field} />
         </label>
 
@@ -177,7 +177,7 @@ export function Builder({ draft, saved, templates, commit, undo, redo, canUndo, 
       </div>
 
       <div className="fixed inset-x-0 bottom-[66px] z-20 mx-auto w-full max-w-md px-4 pb-2">
-        <motion.button whileTap={press} transition={snappy} onClick={() => { tap(12); onSave(false); }} className="w-full rounded-2xl bg-white py-3.5 text-[15px] font-semibold text-black shadow-[0_8px_30px_rgba(0,0,0,.7)]">
+        <motion.button whileTap={press} transition={snappy} onClick={() => { tap(12); onSave(false); }} className="w-full rounded-2xl bg-white py-3.5 text-[0.9375rem] font-semibold text-black shadow-[0_8px_30px_rgba(0,0,0,.7)]">
           {saved ? "Save changes" : "Save to My Looks"}
         </motion.button>
       </div>
@@ -188,16 +188,16 @@ export function Builder({ draft, saved, templates, commit, undo, redo, canUndo, 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} onClick={() => setGuide(false)}>
             <motion.div initial={{ y: 40, opacity: 0, scale: 0.98 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 20, opacity: 0 }} transition={sheetT}
               className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-[26px] bg-[#131316] p-5 safe-b" onClick={(e) => e.stopPropagation()}>
-              <h2 className="mb-4 text-[22px] font-bold tracking-[-0.02em]">Make your own look</h2>
+              <h2 className="mb-4 text-[1.375rem] font-bold tracking-[-0.02em]">Make your own look</h2>
               <ol className="space-y-4">
                 {GUIDE_STEPS.map((s, i) => (
                   <li key={i} className="flex gap-3.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-[13px] font-bold text-black">{i + 1}</span>
-                    <div><div className="text-[15px] font-semibold">{s.t}</div><p className="mt-0.5 text-[13px] leading-relaxed text-white/50">{s.d}</p></div>
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-[0.8125rem] font-bold text-black">{i + 1}</span>
+                    <div><div className="text-[0.9375rem] font-semibold">{s.t}</div><p className="mt-0.5 text-[0.8125rem] leading-relaxed text-white/50">{s.d}</p></div>
                   </li>
                 ))}
               </ol>
-              <button className="mt-5 w-full rounded-2xl bg-white py-3.5 text-[15px] font-semibold text-black" onClick={() => setGuide(false)}>Got it</button>
+              <button className="mt-5 w-full rounded-2xl bg-white py-3.5 text-[0.9375rem] font-semibold text-black" onClick={() => setGuide(false)}>Got it</button>
             </motion.div>
           </motion.div>
         )}

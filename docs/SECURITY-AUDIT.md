@@ -86,6 +86,13 @@ Only a debug APK exists. Before any public release: a release keystore kept outs
 
 Phone-to-phone transfer uses WebRTC over the local network with no STUN/TURN and no signalling server; the offer and answer travel as QR codes the two people show each other. That exchange is the authentication: whoever can scan the QR is who gets connected. The data channel is DTLS-encrypted by the protocol. Received files pass through `acceptMedia()` (finding 2) and are size-capped at 400 MB.
 
+## Addendum, polish round
+
+- New production dependencies: `@capacitor/haptics` and `@capacitor/text-zoom` (both first-party Capacitor). `npm audit --omit=dev`: still 0. Haptics adds Android's `VIBRATE` permission, a normal (install-time, no prompt) permission.
+- The shutter click is synthesised with Web Audio. No audio file is loaded, so the CSP is unchanged.
+- The frame meter's numbers stay in memory on the phone; nothing is stored or sent.
+- Onboarding no longer asks for the microphone or storage up front. Each is requested the first time it is needed (recording video, saving a photo), which is the least-privilege order.
+
 ## Input boundaries, reviewed
 
 | Boundary | Validation |

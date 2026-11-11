@@ -26,7 +26,7 @@ export function Nav({ view, onChange, disabled }: { view: View; onChange: (v: Vi
             <motion.span animate={{ scale: on ? 1 : 0.94 }} transition={smooth} className={on ? "text-[var(--accent)]" : "text-white/40"}>
               <I n={icon} className="h-[23px] w-[23px]" w={1.7} />
             </motion.span>
-            <span className={`text-[10px] font-medium ${on ? "text-[var(--accent)]" : "text-white/40"}`}>{label}</span>
+            <span className={`text-[0.6875rem] font-medium ${on ? "text-[var(--accent)]" : "text-white/40"}`}>{label}</span>
           </button>
         );
       })}
