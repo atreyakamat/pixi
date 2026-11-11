@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BackLink } from "@/ui/BackLink";
 
 export const metadata: Metadata = { title: "Pixi privacy policy", description: "Pixi collects nothing. Your photos never leave your phone." };
 
@@ -6,7 +7,7 @@ export const metadata: Metadata = { title: "Pixi privacy policy", description: "
 export default function Privacy() {
   return (
     <main className="mx-auto min-h-dvh max-w-md select-text overflow-y-auto bg-black px-6 pb-16 pt-14 text-white" style={{ userSelect: "text" }}>
-      <a href="../" className="t-subhead text-[var(--accent)]">‹ Back to Pixi</a>
+      <BackLink className="t-subhead text-[var(--accent)]">‹ Back to Pixi</BackLink>
       <h1 className="t-large mt-6">Privacy</h1>
       <p className="t-body mt-4 text-white/70">Pixi collects nothing. Your photos never leave your phone unless you share them yourself.</p>
 

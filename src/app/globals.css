@@ -28,6 +28,8 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* Keyboard focus is visible; mouse and touch focus is not. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :focus:not(:focus-visible) { outline: none; }
+/* Text fields show a caret; a ring around them as well is noise. */
+input[type="text"]:focus-visible, input:not([type]):focus-visible, textarea:focus-visible { outline: none; }
 
 .hair { box-shadow: inset 0 0 0 1px rgba(255,255,255,.09); }
 

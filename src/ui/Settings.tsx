@@ -179,7 +179,7 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRe
         <Group title="About">
           <Row label="Pixi" sub={isNative() ? "Android app" : "Web app"} />
           <Row label="Free. On-device. No account." sub="Every look is rendered on this phone. Pixi has no server, no sign-in and no analytics, so your photos never leave the phone unless you share them." />
-          <a href="privacy/" className="block px-4 py-3 text-[0.9375rem] text-[var(--accent)]">Privacy policy</a>
+          <a href="/privacy/" className="block px-4 py-3 text-[0.9375rem] text-[var(--accent)]">Privacy policy</a>
         </Group>
       </div>
 

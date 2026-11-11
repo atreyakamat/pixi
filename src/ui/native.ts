@@ -188,3 +188,14 @@ export async function exportDocument(blob: Blob, name: string): Promise<SaveResu
     return { ok: false, reason: plainSaveError(e) };
   }
 }
+
+/** A link or a line of text to the share sheet; copied to the clipboard where there is no share sheet. */
+export async function shareText(text: string, title = "Pixi"): Promise<"shared" | "copied" | "failed"> {
+  try {
+    if (isNative()) { await Share.share({ text, title, dialogTitle: title }); return "shared"; }
+    if (navigator.share) { await navigator.share({ text, title }); return "shared"; }
+  } catch (e) {
+    if ((e as { name?: string })?.name === "AbortError") return "shared"; // the person closed the sheet
+  }
+  try { await navigator.clipboard.writeText(text); return "copied"; } catch { return "failed"; }
+}

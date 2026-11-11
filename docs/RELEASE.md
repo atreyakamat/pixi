@@ -47,4 +47,4 @@ New personal developer accounts (created after 13 November 2023) must run a clos
 
 ## The web version
 
-`netlify.toml` is set up: build command `PIXI_TARGET=app npx next build`, publish folder `out`. Connect the repo in Netlify and it deploys on every push to `main`. The camera needs HTTPS, which Netlify provides.
+`netlify.toml` is set up: build command `PIXI_TARGET=web npx next build`, publish folder `out`. The landing page is at `/`, the app at `/app/`, profiles at `/u/`. After the first deploy, set `NEXT_PUBLIC_PIXI_SITE` to the site's https address when building the Android app, so profile links made on the phone point at it. Connect the repo in Netlify and it deploys on every push to `main`. The camera needs HTTPS, which Netlify provides.
