@@ -1,6 +1,8 @@
 // Core data model. A "look" is just data: an ordered stack of GPU layers plus CPU-drawn overlays.
 
 export type GpuLayerKind =
+  | "portraitBlur"
+  | "denoise"
   | "grade"
   | "splitTone"
   | "channelMix"

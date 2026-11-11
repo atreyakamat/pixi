@@ -2,7 +2,7 @@ import type { LayerSpec, OverlaySpec, Preset } from "@/engine/types";
 import { PRESETS } from "@/presets";
 
 export type Body = "fisheye" | "disposable" | "tv" | "cctv" | "webcam" | "super8" | "flip" | "compact" | "slab" | "bridge" | "toy" | "phone" | "slider" | "camcorder" | "instant";
-export interface CameraDef { brand: string; preset: Preset; body: Body; color: string; model: string; row: "Digicam" | "Special" }
+export interface CameraDef { brand: string; preset: Preset; body: Body; color: string; model: string; row: "Digicam" | "Special" | "Mine" }
 
 const COLORS = ["#c9ccd1", "#2b2d33", "#d9a441", "#b5474a", "#5b8fb9", "#8fae7e", "#e8e0d0", "#8a6bb0"];
 const hash = (s: string) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
@@ -106,4 +106,20 @@ export function withEffects(base: Preset, fx: FxState): Preset {
   }
   if (on.has("frame") && !overlays.some((o) => o.kind === "frame")) overlays.push({ kind: "frame", style: "polaroid", color: "#f4efe6" });
   return { ...base, layers, overlays };
+}
+
+import type { FilmStock } from "@/presets/films";
+import type { GpuLayerKind } from "@/engine/types";
+
+/** Camera card for a user-made look. */
+export function cameraFromPreset(p: Preset): CameraDef {
+  const h = hash(p.id);
+  return { brand: "My Looks", preset: p, body: (["compact", "slab", "bridge", "toy", "flip", "super8"] as Body[])[h % 6], color: COLORS[(h >>> 3) % COLORS.length], model: `ME-${10 + ((h >>> 6) % 90)}`, row: "Mine" };
+}
+
+const COLOUR_KINDS: GpuLayerKind[] = ["grade", "splitTone", "channelMix", "filmCurve", "grain"];
+/** A film stock replaces the camera's colour and grain, and keeps its lens and artefact layers. */
+export function withFilm(base: Preset, film: FilmStock | null): Preset {
+  if (!film) return base;
+  return { ...base, layers: [...base.layers.filter((l) => !COLOUR_KINDS.includes(l.kind)), ...film.layers] };
 }

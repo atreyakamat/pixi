@@ -1,0 +1,10 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader"] });
+const p = await b.newPage(); await p.setViewport({ width: 420, height: 1000 });
+await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" });
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); await sleep(3000);
+await p.evaluate(()=>[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="PORTRAIT").click()); await sleep(600);
+const box = await p.evaluate(()=>{ const r=document.querySelector("canvas").getBoundingClientRect(); return {x:r.x,y:r.y,w:r.width,h:r.height}; });
+await p.mouse.click(box.x+box.w/2, box.y+box.h*0.2); await sleep(2500); await p.screenshot({ path: "/tmp/pt_top.png", clip: {x:0,y:box.y-5,width:420,height:box.h+10} });
+await p.mouse.click(box.x+box.w/2, box.y+box.h*0.85); await sleep(2500); await p.screenshot({ path: "/tmp/pt_bot.png", clip: {x:0,y:box.y-5,width:420,height:box.h+10} });
+await b.close();
