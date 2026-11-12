@@ -17,11 +17,13 @@ export interface Settings {
   sound: boolean;
   /** Show the look builder and its tools. Off keeps Pixi to shoot, develop, make. */
   advanced: boolean;
+  /** Put the profile's @handle on what Build makes. */
+  sign: boolean;
   /** Frame-time meter over the viewfinder, for measuring on a real phone. */
   meter: boolean;
 }
 
-export const DEFAULTS: Settings = { saveMode: "auto", format: "jpeg", quality: 0.92, haptics: true, develop: true, stripPair: false, rollLimit: 500, sound: true, advanced: false, meter: false };
+export const DEFAULTS: Settings = { saveMode: "auto", format: "jpeg", quality: 0.92, haptics: true, develop: true, stripPair: false, rollLimit: 500, sound: true, advanced: false, meter: false, sign: false };
 const KEY = "pixi:settings:v1";
 
 export function loadSettings(): Settings {
@@ -40,6 +42,7 @@ export function loadSettings(): Settings {
       sound: v.sound !== false,
       advanced: v.advanced === true,
       meter: v.meter === true,
+      sign: v.sign === true,
     };
   } catch { return { ...DEFAULTS }; }
 }

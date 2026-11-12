@@ -15,7 +15,7 @@ try {
   g.fillStyle = "#2a2a2e"; g.fillRect(0, 0, out.width, out.height);
   const tmp = document.createElement("canvas");
   LAYOUTS.forEach((t, i) => {
-    renderLayout(tmp, {
+    renderLayout(tmp, { sign: (window as unknown as { __sign?: string }).__sign,
       template: t, photos, scale: 1, placeholder: true,
       slide: { index: 2, total: 5, caption: "A good evening, and nobody wanted to go home" },
     });
