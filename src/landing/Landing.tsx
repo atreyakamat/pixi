@@ -15,7 +15,7 @@ const rise = { initial: { opacity: 0, y: 28 }, whileInView: { opacity: 1, y: 0 }
 const STEPS: { n: string; title: string; body: string }[] = [
   { n: "01", title: "Shoot", body: "Eighty-four cameras in one: digicams, disposables, camcorders, flip phones, instant film. The look is live in the viewfinder, so what you see is what you keep." },
   { n: "02", title: "Develop", body: "Press the shutter and a print slides out and comes up slowly, the way instant film does. It is the best three seconds in the app." },
-  { n: "03", title: "Make", body: "Pour a roll into photobooth strips, carousels sized for your feed, contact sheets, 4×6 prints or a sticker sheet with cut lines." },
+  { n: "03", title: "Make", body: "Pour a roll into photobooth strips, carousels of any length sized for your feed, contact sheets, 4×6 prints or a sticker sheet with cut lines." },
 ];
 
 const FACTS: { icon: IconName; title: string; body: string }[] = [
@@ -78,7 +78,7 @@ export function Landing() {
           <div className="grid items-center gap-14 md:grid-cols-2">
             <div>
               <motion.h2 {...rise} className="text-[clamp(1.9rem,4.4vw,3rem)] font-bold leading-[1.05] tracking-[-0.03em]">One roll.<br />Every format.</motion.h2>
-              <motion.p {...rise} className="mt-5 max-w-[30rem] text-[1.0625rem] leading-[1.5] text-white/60">Pick the photos, pick a frame, save. Twenty layouts, from a booth strip to an A4 sticker sheet at print resolution, all made on your phone.</motion.p>
+              <motion.p {...rise} className="mt-5 max-w-[30rem] text-[1.0625rem] leading-[1.5] text-white/60">Pick the photos, pick a frame, save. Twenty-four layouts, from a booth strip to an A4 sticker sheet at print resolution, all made on your phone.</motion.p>
             </div>
             <Showcase />
           </div>

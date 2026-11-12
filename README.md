@@ -8,7 +8,7 @@ Pixi is a retro camera that renders every look on your phone's GPU. There is no 
 
 - **Looks** — dozens of camera and film looks, a layer-based look builder, your own saved looks, favourites and most-used first.
 - **Develop** — each shot comes up like an instant print. Any photo can become a six-second develop clip (MP4) for a story or a launch post.
-- **Build** — one roll, sixteen-plus layouts: strips, four-up booth cards, 1080×1350 carousels with a caption per page, a numbered contact sheet, and 300 DPI prints with bleed, cut lines and crop marks.
+- **Build** — one roll, twenty-four layouts: strips, four-up booth cards, carousels of any length at 1080×1350 in eight styles (Instant, Glass, Noir, Editorial, Photo Dump and more) with a caption per page, a numbered contact sheet, and 300 DPI prints with bleed, cut lines and crop marks.
 - **Booth** — pick a frame, a 3-2-1 countdown, four shots land straight in it.
 - **Roll** — everything stays in Pixi until you export; a 30-day bin for mistakes; import from the phone; a zip backup you control.
 - **Share looks** — a look fits in a QR code. Scan one from another phone; nothing goes through a server.
@@ -67,6 +67,7 @@ node scripts/clip-check.mjs          # the develop clip encodes
 node scripts/e2e-profile.mjs         # profile card, link round trip through /u/, hostile link refused
 node scripts/offline-check.mjs        # one visit, server stopped: landing, app, camera still work
 node scripts/sign-check.mjs           # the @handle credit: toggle, preview, remembered
+node scripts/e2e-unlimited.mjs        # a 45-page carousel: every page right size, none blank, none repeated
 node scripts/e2e-landing.mjs         # landing page: live demo renders and reacts, phone and desktop
 node scripts/bigtext-check.mjs        # every screen at the largest text size on a small phone
 node scripts/privacy-check.mjs        # privacy page reachable, scrolls, returns

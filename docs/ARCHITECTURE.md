@@ -74,6 +74,14 @@ The shutter shows a copy of the viewfinder in the same frame, then does the full
 
 **Limits.** Only on the `web` target (the Android app's files are already on the phone; a cache in development would hide edits). The first visit needs a connection. Photos are not in this cache: they live in IndexedDB as before. `netlify.toml` serves `sw.js` with `no-cache` so updates are never stuck, and each build registers the worker under a new address.
 
+## 8. Carousels have no page limit
+
+**Decision.** A carousel can hold any number of pages. Build keeps only the page on screen and its two neighbours decoded; export decodes, draws, encodes and releases one page at a time.
+
+**Why.** The old design kept every page's processed photo in memory with room for about 37, and anything past that would have exported blank. A fixed cap just moves the cliff; a window removes it.
+
+**Guards.** Instagram takes 20 photos per post, so Build says how many posts a long set becomes. Saving a set that would push older shots past the roll's limit is refused, with Share offered instead, so originals are never dropped as a side effect.
+
 ## Known debt
 
 - `src/shell/PixiApp.tsx` is about 1,100 lines and owns too much (camera modes, capture, navigation). The toast queue has moved out to `src/ui/useToasts.ts`; capture should follow as a `useCapture` hook. The e2e suites cover it, which makes that refactor safe to do.

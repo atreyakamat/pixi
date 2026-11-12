@@ -9,7 +9,15 @@
 
 export type Paint = string | { grad: "v" | "h"; stops: [number, string][] };
 
-export interface Slot { x: number; y: number; w: number; h: number; r?: number }
+export interface Slot {
+  x: number; y: number; w: number; h: number; r?: number;
+  /** Tilt in degrees, about the slot's centre. */
+  rot?: number;
+  /** A soft drop shadow under the photo, as a blur radius in layout units. */
+  shadow?: number;
+  /** A paper border around the photo, the way a print has one. `foot` makes the bottom edge deeper. */
+  mat?: { w: number; color: string; foot?: number };
+}
 
 export type Decor =
   | { k: "rect"; x: number; y: number; w: number; h: number; r?: number; fill?: Paint; stroke?: string; lw?: number; dash?: number[] }
@@ -29,6 +37,8 @@ export type Decor =
   /** A flat colour over the page: the warm, faded cast of an old print. */
   | { k: "wash"; color: string; alpha: number; mode?: "multiply" | "screen" | "overlay" | "soft-light" | "source-over" }
   /** A counter like 3/5, drawn as a small pill. Carousels use it; strips normally do not. */
+  /** The page's own photo, blurred to fill the whole page and dimmed, as a backdrop for the sharp one on top. */
+  | { k: "backdrop"; dim?: number; tint?: string }
   | { k: "pill"; x: number; y: number; t: string; size: number; fg: string; bg: string; pad?: number; align?: "left" | "center" | "right" };
 
 export interface LayoutField { key: string; label: string; def: string; max: number }
@@ -150,6 +160,7 @@ function lines(g: CanvasRenderingContext2D, text: string, max: number): string[]
 
 function drawDecor(g: CanvasRenderingContext2D, d: Decor, t: Layout, vals: Record<string, string>) {
   switch (d.k) {
+    case "backdrop": break; // drawn by the page loop, which has the photo
     case "rect": {
       roundRect(g, d.x, d.y, d.w, d.h, d.r);
       if (d.fill) { g.fillStyle = paint(g, d.fill, d.x, d.y, d.w, d.h); g.fill(); }
@@ -289,6 +300,31 @@ function subst(s: string, vals: Record<string, string>) {
 }
 
 /** Draws a source image into a slot, cropped to fill like CSS object-fit: cover. */
+/**
+ * The photo as a soft, out-of-focus fill for the whole page. Shrinking it to a thumbnail and
+ * scaling it back up in two steps blurs it on every browser (canvas blur filters are not
+ * available everywhere) and costs almost nothing.
+ */
+function drawBackdrop(g: CanvasRenderingContext2D, t: Layout, p: LayoutPhoto | null | undefined, d: { dim?: number; tint?: string }) {
+  if (!p) return;
+  const step = (w: number, h: number, src: CanvasImageSource, sw: number, sh: number) => {
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const x = c.getContext("2d")!; x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high";
+    const k = Math.max(w / sw, h / sh);
+    x.drawImage(src, (w - sw * k) / 2, (h - sh * k) / 2, sw * k, sh * k);
+    return c;
+  };
+  const tiny = step(Math.round(t.w / 60), Math.round(t.h / 60), p.src, p.w, p.h);
+  const mid = step(Math.round(t.w / 12), Math.round(t.h / 12), tiny, tiny.width, tiny.height);
+  g.save();
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  // Drawn a little oversize so the soft edges of the upscale fall outside the page.
+  g.drawImage(mid, -t.w * 0.06, -t.h * 0.06, t.w * 1.12, t.h * 1.12);
+  if (d.tint) { g.fillStyle = d.tint; g.fillRect(0, 0, t.w, t.h); }
+  g.fillStyle = `rgba(0,0,0,${d.dim ?? 0.35})`; g.fillRect(0, 0, t.w, t.h);
+  g.restore();
+}
+
 function cover(g: CanvasRenderingContext2D, img: CanvasImageSource, iw: number, ih: number, s: Slot) {
   const k = Math.max(s.w / iw, s.h / ih);
   const w = iw * k, h = ih * k;
@@ -375,6 +411,9 @@ export function renderLayout(canvas: HTMLCanvasElement, o: RenderOpts) {
     ...Object.fromEntries((t.fields ?? []).map((f) => [f.key, f.def])),
     ...(o.values ?? {}),
     index: String(o.slide?.index ?? 1),
+    // Zero-padded, for layouts that set the page number as a design element: 01, 02 …
+    index2: String(o.slide?.index ?? 1).padStart(2, "0"),
+    total2: String(o.slide?.total ?? 1).padStart(2, "0"),
     total: String(o.slide?.total ?? 1),
     ...(o.slide?.caption !== undefined ? { caption: o.slide.caption } : {}),
   };
@@ -386,9 +425,19 @@ export function renderLayout(canvas: HTMLCanvasElement, o: RenderOpts) {
     g.save(); roundRect(g, 0, 0, t.w, t.h); g.clip();
     g.fillStyle = paint(g, t.bg, 0, 0, t.w, t.h);
     g.fillRect(0, 0, t.w, t.h);
-    for (const d of t.under) drawDecor(g, d, t, vals);
+    for (const d of t.under) { if (d.k === "backdrop") drawBackdrop(g, t, o.photos[0], d); else drawDecor(g, d, t, vals); }
     t.slots.forEach((s, i) => {
       const p = o.photos[i];
+      g.save();
+      if (s.rot) { g.translate(s.x + s.w / 2, s.y + s.h / 2); g.rotate((s.rot * Math.PI) / 180); g.translate(-(s.x + s.w / 2), -(s.y + s.h / 2)); }
+      if (s.mat || s.shadow) {
+        const m = s.mat?.w ?? 0, foot = s.mat?.foot ?? m;
+        g.save();
+        if (s.shadow) { const k = g.getTransform().a; g.shadowColor = "rgba(0,0,0,.45)"; g.shadowBlur = s.shadow * k; g.shadowOffsetY = s.shadow * 0.4 * k; }
+        roundRect(g, s.x - m, s.y - m, s.w + m * 2, s.h + m + foot, s.mat ? Math.min(6, m) : s.r);
+        g.fillStyle = s.mat?.color ?? "#000000"; g.fill();
+        g.restore();
+      }
       if (p) cover(g, p.src, p.w, p.h, s);
       else if (o.placeholder) {
         roundRect(g, s.x, s.y, s.w, s.h, s.r);
@@ -400,6 +449,7 @@ export function renderLayout(canvas: HTMLCanvasElement, o: RenderOpts) {
         g.fillText(String(i + 1), s.x + s.w / 2, s.y + s.h / 2);
         g.textBaseline = "alphabetic";
       }
+      g.restore();
     });
     for (const d of t.over ?? []) drawDecor(g, d, t, vals);
     if (o.sign) drawSign(g, t, o.sign);

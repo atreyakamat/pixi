@@ -13,8 +13,10 @@ jobs:
         with: { node-version: 22, cache: npm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
-      - uses: android-actions/setup-android@v3
+      # GitHub's Ubuntu runners already ship the Android SDK with licences accepted; Gradle fetches any
+      # missing platform itself. (The separate setup action started failing on a missing "tools" package.)
       - run: npm ci
+      - run: npm run check
       - run: PIXI_TARGET=app npx next build
       - run: npx cap sync android
       - run: ./gradlew assembleDebug --no-daemon

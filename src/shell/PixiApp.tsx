@@ -383,6 +383,9 @@ export default function PixiApp() {
     return item;
   };
 
+  /** A shot that could not be stored must never fail silently. */
+  const shotFailed = () => say("Pixi couldn't keep that shot. Free some space on your phone, then try again.");
+
   /** Some phones put saved photos in Documents/Pixi rather than the gallery. Say so once, not on every shot. */
   const noteFilesOnce = () => {
     try { if (localStorage.getItem("pixi:noted-files")) return; localStorage.setItem("pixi:noted-files", "1"); } catch { /* private */ }
@@ -407,7 +410,7 @@ export default function PixiApp() {
 
   /** Photos already on the phone. Pixi lays them out; it does not need to have taken them. */
   const importPhotos = async (files: FileList | null) => {
-    const list = Array.from(files ?? []).slice(0, 24);
+    const list = Array.from(files ?? []).slice(0, 200);
     if (!list.length) return;
     say(list.length === 1 ? "Adding a photo…" : `Adding ${list.length} photos…`);
     let ok = 0;
@@ -526,7 +529,7 @@ export default function PixiApp() {
     const rec = new MediaRecorder(out, mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000 } : undefined);
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-    rec.onstop = () => { addShot(new Blob(chunks, { type: rec.mimeType || "video/webm" }), "video", ext); };
+    rec.onstop = () => { addShot(new Blob(chunks, { type: rec.mimeType || "video/webm" }), "video", ext).catch(shotFailed); };
     rec.start(250);
     recRef.current = { rec, mic };
     setElapsed(0); setRecording(true);
@@ -556,7 +559,7 @@ export default function PixiApp() {
     pauseRef.current = true;
     try {
       const res = await encodeTimelapse(t.frames, t.w, t.h, 24);
-      if (res) addShot(res.blob, "video", res.ext); else setError("A timelapse needs at least two frames. Let it run a little longer next time.");
+      if (res) addShot(res.blob, "video", res.ext).catch(shotFailed); else setError("A timelapse needs at least two frames. Let it run a little longer next time.");
     } finally { pauseRef.current = false; setBusy(""); }
   };
 
@@ -609,7 +612,7 @@ export default function PixiApp() {
   const receiveFile = async (blob: Blob) => {
     const m = await acceptMedia(blob);
     if (!m) { say("That file wasn't a photo or video, so Pixi didn't keep it."); return; }
-    void addShot(m.blob, m.kind, m.ext);
+    addShot(m.blob, m.kind, m.ext).catch(shotFailed);
   };
 
   const share = async (s: Shot) => { await shareOrSave(s.blob, `pixi-${s.created}.${s.ext}`); };
@@ -634,6 +637,12 @@ export default function PixiApp() {
 
   /** Finished pages become shots of their own, so they live in the roll like anything else. */
   const exportPages = async (blobs: Blob[], extension: string) => {
+    // The roll drops its oldest shots past the limit. A long carousel must never push originals out unasked.
+    const over = shots.length + blobs.length - settings.rollLimit;
+    if (over > 0) {
+      say(`Saving these would push your ${over} oldest ${over === 1 ? "shot" : "shots"} out of the roll (it keeps ${settings.rollLimit}). Share them instead, or raise the limit in Settings.`, { label: "Share", run: () => { void sharePages(blobs, extension); } });
+      return;
+    }
     for (const b of blobs) await addShot(b, "photo", extension, { develop: false, quiet: blobs.length > 1 });
     if (blobs.length > 1) say(`${blobs.length} pages in your roll`);
     setView("roll");
@@ -882,7 +891,7 @@ export default function PixiApp() {
             )}
 
             {!cam.live && !still && !(error || cam.error) && boot === "ready" && (
-              <motion.button whileTap={press} transition={snappy} onClick={() => startCamera(cam.facing)}
+              <motion.button whileTap={press} transition={snappy} onClick={() => { void startCamera(cam.facing); }}
                 className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40">
                 <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black"><I n="camera" className="h-7 w-7" /></span>
                 <span className="text-[0.8125rem] font-medium">Tap to start the camera</span>
@@ -893,7 +902,7 @@ export default function PixiApp() {
               <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-black/80 p-3.5 text-center backdrop-blur-xl" onPointerDown={(e) => e.stopPropagation()}>
                 <p className="text-[0.8125rem] leading-snug text-white/85">{error || cam.error}</p>
                 <div className="mt-3 flex justify-center gap-2">
-                  <button onClick={() => { setError(""); cam.setError(""); startCamera(cam.facing); }} className="rounded-full bg-white px-4 py-1.5 text-[0.8125rem] font-semibold text-black">Try again</button>
+                  <button onClick={() => { setError(""); cam.setError(""); void startCamera(cam.facing); }} className="rounded-full bg-white px-4 py-1.5 text-[0.8125rem] font-semibold text-black">Try again</button>
                   <label className="cursor-pointer rounded-full bg-white/12 px-4 py-1.5 text-[0.8125rem] font-medium">Import a photo<input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
                 </div>
               </div>

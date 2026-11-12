@@ -47,7 +47,9 @@ type Tab = "frame" | "photos" | "look" | "text";
 const TABS: [Tab, string][] = [["frame", "Frame"], ["photos", "Photos"], ["look", "Look"], ["text", "Text"]];
 const FAMILY_ORDER = ["Carousel", "Booth", "Ticket", "Film", "Card", "Sheet", "Print", "Paper", "Vintage", "Modern"];
 /** The six frames most people want. The rest are one tap away under More. */
-const FEATURED = ["st-classic", "ca-instant", "st-grid", "ca-full", "pr-4x6", "pr-stickers"];
+const FEATURED = ["ca-instant", "ca-glass", "ca-noir", "st-classic", "st-grid", "pr-stickers"];
+/** Instagram takes this many photos in one post; longer sets are posted in parts. */
+const IG_PER_POST = 20;
 
 /**
  * What Build opens with when nothing was sent over: the frame that fits how many photos were
@@ -57,7 +59,7 @@ function smartStart(photoIds: string[]): Doc {
   const pick = photoIds.length >= 5 ? "ca-instant" : "st-classic";
   const t = layoutById(pick);
   if (isCarousel(t)) {
-    const take = photoIds.slice(0, Math.min(t.slides?.max ?? 10, 6));
+    const take = photoIds.slice(0, 10);
     return { tplId: pick, srcs: take, looks: take.map(() => null), caps: take.map(() => ""), values: {} };
   }
   const n = t.slots.length;
@@ -116,13 +118,20 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
   }, [seedKey]);
 
   /** Renders anything the page needs but has not drawn yet, one photo at a time. */
-  const wanted = doc.srcs.map((s, i) => (s ? bmpKey(s, doc.looks[i]) : "")).join("~");
+  // A carousel can be any length, so only the page on screen and its neighbours are kept decoded;
+  // strips and sheets need all their windows at once. Everything else is released.
+  const near = (i: number) => !carousel || Math.abs(i - slot) <= 1;
+  const wanted = doc.srcs.map((s, i) => (s && near(i) ? bmpKey(s, doc.looks[i]) : "")).join("~");
   useEffect(() => {
     let dead = false;
-    const missing = doc.srcs.map((s, i) => ({ s, k: s ? bmpKey(s, doc.looks[i]) : "", i })).filter((x) => x.s && !cache.current.has(x.k));
+    const need = doc.srcs.map((s, i) => ({ s, k: s ? bmpKey(s, doc.looks[i]) : "", i })).filter((x) => x.s && near(x.i));
+    const keep = new Set(need.map((x) => x.k));
+    for (const [k, b] of cache.current) if (!keep.has(k) && cache.current.size > 16) { b.close(); cache.current.delete(k); }
+    const missing = need.filter((x) => !cache.current.has(x.k));
     if (!missing.length) return;
     (async () => {
-      setBusy(missing.length > 1 ? "Applying…" : "Adding…");
+      // Flipping pages loads quietly; only a real batch (a new look across a strip) says so.
+      if (missing.length > 2) setBusy("Applying…");
       try {
         for (const m of missing) {
           const src = roll.find((r) => r.id === m.s);
@@ -131,7 +140,6 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
           const preset = lk ? looks.find((l) => l.preset.id === lk)?.preset ?? null : null;
           const bmp = await applyLook(src.blob, preset);
           if (dead) { bmp.close(); return; }
-          if (cache.current.size > 36) { const first = cache.current.keys().next().value; if (first) { cache.current.get(first)?.close(); cache.current.delete(first); } }
           cache.current.set(m.k, bmp);
           setTick((t) => t + 1);
         }
@@ -258,10 +266,22 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
     const c = document.createElement("canvas");
     const out: Blob[] = [];
     if (carousel) {
+      // One page at a time: decode, draw, encode, release. Memory stays flat however long the set is.
       const live = doc.srcs.map((s, i) => ({ s, i })).filter((x) => x.s);
       for (let n = 0; n < live.length; n++) {
-        renderLayout(c, { template: tpl, photos: [bmpAt(live[n].i)], values: doc.values, sign, scale, slide: { index: n + 1, total: live.length, caption: doc.caps[live[n].i] ?? "" } });
+        if (live.length > 3) setBusy(`Making page ${n + 1} of ${live.length}…`);
+        const i = live[n].i;
+        let photo = bmpAt(i), mine: ImageBitmap | null = null;
+        if (!photo) {
+          const src = roll.find((r) => r.id === live[n].s);
+          if (!src) continue;
+          const lk = doc.looks[i];
+          mine = await applyLook(src.blob, lk ? looks.find((l) => l.preset.id === lk)?.preset ?? null : null);
+          photo = { src: mine, w: mine.width, h: mine.height };
+        }
+        renderLayout(c, { template: tpl, photos: [photo], values: doc.values, sign, scale, slide: { index: n + 1, total: live.length, caption: doc.caps[i] ?? "" } });
         out.push(await layoutToBlob(c, mime(settings), settings.quality));
+        mine?.close();
       }
     } else if (print) {
       // Prints are lossless so cut lines and crop marks stay crisp at 300 DPI.
@@ -319,7 +339,7 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
         <div className="min-w-0">
           <h1 className="text-[1.75rem] font-bold leading-none tracking-[-0.02em]">Build</h1>
           <p className="mt-1 truncate text-[0.75rem] text-white/40">
-            {carousel ? `${pages} ${pages === 1 ? "page" : "pages"} · 1080×1350` : `${tpl.name} · ${tpl.slots.length} photo${tpl.slots.length > 1 ? "s" : ""}`}
+            {carousel ? `${pages} ${pages === 1 ? "page" : "pages"} · ${pages > IG_PER_POST ? `${Math.ceil(pages / IG_PER_POST)} Instagram posts of ${IG_PER_POST}` : "1080×1350"}` : `${tpl.name} · ${tpl.slots.length} photo${tpl.slots.length > 1 ? "s" : ""}`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -348,7 +368,9 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
           className={`max-h-full max-w-full rounded-[6px] object-contain shadow-[0_10px_40px_rgba(0,0,0,.6)] ${carousel ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`} />
         {carousel && pages > 1 && (
           <div className="pointer-events-none flex shrink-0 justify-center gap-1.5">
-            {doc.srcs.map((_, i) => <span key={i} className={`h-1.5 rounded-full transition-all ${i === slot ? "w-4 bg-white" : "w-1.5 bg-white/35"}`} />)}
+            {doc.srcs.length <= 12
+              ? doc.srcs.map((_, i) => <span key={i} className={`h-1.5 rounded-full transition-all ${i === slot ? "w-4 bg-white" : "w-1.5 bg-white/35"}`} />)
+              : <span className="lcd rounded-full bg-white/10 px-2.5 py-0.5 text-[0.6875rem] tabular-nums text-white/70">{slot + 1} / {doc.srcs.length}</span>}
           </div>
         )}
         <AnimatePresence>
@@ -408,7 +430,7 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
               <div className="flex gap-2 overflow-x-auto px-4" style={{ scrollbarWidth: "none" }}>
                 <button onClick={() => { tap(); move(slot, -1); }} disabled={slot <= 0} aria-label="Move earlier" className={`${chip(false)} disabled:opacity-30`}>←</button>
                 <button onClick={() => { tap(); move(slot, 1); }} disabled={slot >= cap - 1} aria-label="Move later" className={`${chip(false)} disabled:opacity-30`}>→</button>
-                <button onClick={() => { tap(); fillRest(); }} disabled={!photos.length} className={chip(false)}>Fill the rest</button>
+                <button onClick={() => { tap(); fillRest(); }} disabled={!photos.length} className={chip(false)}>{carousel ? "Add all" : "Fill the rest"}</button>
                 {doc.srcs[slot] && <button onClick={() => { tap(); clearSlot(slot); }} className={chip(false)}>Remove</button>}
               </div>
 
