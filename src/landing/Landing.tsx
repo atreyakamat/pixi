@@ -54,6 +54,7 @@ export function Landing() {
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ ...reveal, delay: 0.22 }} className="mt-9 flex flex-wrap items-center gap-3">
               <a href="/app/" className="rounded-full bg-white px-7 py-4 text-[1.0625rem] font-semibold text-black transition-transform active:scale-95">Open the camera</a>
+              <a href="/make/" className="rounded-full bg-white/10 px-7 py-4 text-[1.0625rem] font-semibold transition-transform active:scale-95">Make a carousel</a>
               {APK ? <a href={APK} className="rounded-full bg-white/10 px-7 py-4 text-[1.0625rem] font-semibold transition-transform active:scale-95">Get the Android app</a> : null}
             </motion.div>
             <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-4 text-[0.8125rem] text-white/40">Works in your browser, no install, and offline after your first visit. {APK ? "" : "The Android app is on the way."}</motion.p>
@@ -120,7 +121,7 @@ export function Landing() {
       <footer className="relative border-t border-white/[0.07]">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-[0.8125rem] text-white/45">
           <span>Pixi. Free. On-device. No account.</span>
-          <span className="flex gap-6"><a className="hover:text-white" href="/privacy/">Privacy</a><a className="hover:text-white" href={REPO}>GitHub</a><a className="hover:text-white" href="/app/">Open Pixi</a></span>
+          <span className="flex gap-6"><a className="hover:text-white" href="/privacy/">Privacy</a><a className="hover:text-white" href={REPO}>GitHub</a><a className="hover:text-white" href="/make/">Carousel maker</a><a className="hover:text-white" href="/app/">Open Pixi</a></span>
         </div>
       </footer>
     </div>
