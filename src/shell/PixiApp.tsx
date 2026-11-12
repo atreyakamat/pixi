@@ -412,16 +412,24 @@ export default function PixiApp() {
   const importPhotos = async (files: FileList | null) => {
     const list = Array.from(files ?? []).slice(0, 200);
     if (!list.length) return;
-    say(list.length === 1 ? "Adding a photo…" : `Adding ${list.length} photos…`);
+    say(list.length === 1 ? "Adding…" : `Adding ${list.length} files…`);
     let ok = 0;
+    let videos = 0;
     for (const f of list) {
       // Trust the bytes, not the name: a renamed file is retyped or refused here.
       const m = await acceptMedia(f);
       if (!m) continue;
-      try { await addShot(m.blob, m.kind, m.ext, { develop: false, autoSave: false, quiet: true }); ok++; }
-      catch { /* skip anything the phone will not decode */ }
+      try {
+        await addShot(m.blob, m.kind, m.ext, { develop: false, autoSave: false, quiet: true });
+        ok++;
+        if (m.kind === "video") videos++;
+      } catch { /* skip anything the phone will not decode */ }
     }
-    say(ok ? `${ok} added to your roll` : "Those files aren't photos Pixi can open. Try JPEG or PNG.");
+    const skipped = list.length - ok;
+    if (!ok) { say("Pixi can't open those. It takes JPEG, PNG and WebP photos, and MP4 or WebM video."); return; }
+    const what = videos === ok ? (ok === 1 ? "video" : "videos") : videos ? "photos and videos" : ok === 1 ? "photo" : "photos";
+    // Saying how many were refused is the difference between a quiet loss and a known one.
+    say(`${ok} ${what} added${skipped ? `, ${skipped} Pixi couldn't open` : ""}`);
   };
 
   // Load saved shots on launch so nothing is lost when the app is closed. Also used after a restore.

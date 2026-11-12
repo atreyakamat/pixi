@@ -9,6 +9,8 @@ import { backupRoll, keepStorage, restoreRoll, storageEstimate } from "./backup"
 import { exportDocument } from "./native";
 import { BUDGET, report } from "./perf";
 import { isNative } from "./native";
+import { canPickFolder, loadSaveTarget, pickFolder, saveSaveTarget } from "./saveTarget";
+import { cameraState, micState, type PermState, requestMedia, settingsPath } from "./permissions";
 
 const mb = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
@@ -31,6 +33,80 @@ function PerfRows() {
       <Row label="Viewfinder" sub={`${r.fps} fps · median ${r.medianMs} ms${mark(r.medianMs, BUDGET.frameMs + 0.5)} · 95th ${r.p95Ms} ms · ${r.jank} stutters in ${r.frames} frames`} />
       <Row label="Shutter" sub={r.feedbackMs ? `On screen in ${r.feedbackMs} ms${mark(r.feedbackMs, BUDGET.feedbackMs)} · in your roll in ${r.savedMs || "–"} ms${mark(r.savedMs, BUDGET.savedMs)}` : "Take a photo to measure"} />
     </>
+  );
+}
+
+/** Where saved photos land, and a way to change it. Android only; elsewhere there is no choice. */
+function WhereGroup({ say }: { say: (m: string) => void }) {
+  const [target, setTarget] = useState<ReturnType<typeof loadSaveTarget>>(null);
+  const [checking, setChecking] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is read after mount
+  useEffect(() => { setTarget(loadSaveTarget()); }, []);
+  if (!canPickFolder()) return null;
+
+  const choose = async () => {
+    setChecking(true);
+    try {
+      const t = await pickFolder();
+      if (t) { setTarget(t); say(`Photos will be saved to ${t.label}`); }
+    } catch { say("That folder couldn't be used. Pixi will keep saving to your gallery."); }
+    setChecking(false);
+  };
+  const clear = () => { saveSaveTarget(null); setTarget(null); say("Photos will go to your gallery"); };
+
+  return (
+    <Group title="Where photos go" note={target
+      ? "Pixi can write only to this one folder. Move or delete it and Pixi will ask you to pick again."
+      : "Without a folder, photos go to a Pixi album in your gallery."}>
+      <Row label={target ? target.label : "Your gallery"} sub={target ? "The folder you picked" : "A Pixi album"}>
+        <button onClick={() => { tap(); void choose(); }} disabled={checking}
+          className="shrink-0 rounded-full bg-white/[0.12] px-3.5 py-1.5 text-[0.8125rem] font-medium disabled:opacity-50">
+          {target ? "Change" : "Choose"}
+        </button>
+      </Row>
+      {target && (
+        <Row label="Use my gallery instead">
+          <button onClick={() => { tap(); clear(); }} className="shrink-0 rounded-full bg-white/[0.12] px-3.5 py-1.5 text-[0.8125rem] font-medium">Switch</button>
+        </Row>
+      )}
+    </Group>
+  );
+}
+
+/** Each permission, what it is for, and what to do when it has been refused. */
+function PermissionsGroup() {
+  const [cam, setCam] = useState<PermState>("unknown");
+  const [mic, setMic] = useState<PermState>("unknown");
+  const refresh = () => { void cameraState().then(setCam); void micState().then(setMic); };
+  // The states come from the platform asynchronously, so they land after mount by nature.
+  useEffect(refresh, []);
+
+  const word = (s: PermState) => (s === "granted" ? "Allowed" : s === "denied" ? "Blocked" : s === "prompt" ? "Not asked yet" : "Not checked");
+  const ask = async (kind: "camera" | "microphone") => {
+    tap();
+    await requestMedia(kind);
+    refresh();
+  };
+
+  return (
+    <Group title="Permissions" note={cam === "denied" || mic === "denied"
+      ? `A blocked permission can only be changed by your phone: ${settingsPath}.`
+      : "Pixi asks for these only when a feature needs them, and works without them."}>
+      <Row label="Camera" sub={`${word(cam)} · the viewfinder`}>
+        {cam !== "granted" && (
+          <button onClick={() => void ask("camera")} className="shrink-0 rounded-full bg-white/[0.12] px-3.5 py-1.5 text-[0.8125rem] font-medium">
+            {cam === "denied" ? "How to fix" : "Allow"}
+          </button>
+        )}
+      </Row>
+      <Row label="Microphone" sub={`${word(mic)} · sound in videos`}>
+        {mic !== "granted" && (
+          <button onClick={() => void ask("microphone")} className="shrink-0 rounded-full bg-white/[0.12] px-3.5 py-1.5 text-[0.8125rem] font-medium">
+            {mic === "denied" ? "How to fix" : "Allow"}
+          </button>
+        )}
+      </Row>
+    </Group>
   );
 }
 
@@ -129,6 +205,10 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRe
             </div>
           )}
         </Group>
+
+        <WhereGroup say={say} />
+
+        <PermissionsGroup />
 
         <Group title="Photobooth strips" note="A real booth prints two identical strips so you can keep one and give one away.">
           <Row label="Print a pair" sub="Export two copies side by side">

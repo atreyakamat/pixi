@@ -56,7 +56,7 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
         <p className="t-body max-w-[17rem] text-white/50">Everything you shoot lands here and stays on this phone.</p>
         <motion.button whileTap={press} transition={snappy} onClick={() => { tap(); onCamera(); }} className="t-headline mt-2 rounded-full bg-white px-7 py-3.5 text-black">Take a photo</motion.button>
         <button onClick={() => fileRef.current?.click()} className="t-subhead mt-1 py-2 text-white/45 underline-offset-4 active:underline">or add from your phone</button>
-        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { onImport(e.target.files); e.target.value = ""; }} />
+        <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { onImport(e.target.files); e.target.value = ""; }} />
       </div>
     );
   }
@@ -70,13 +70,13 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
         </div>
         <div className="flex items-center gap-2 pb-1">
           {!picking && (
-            <button onClick={() => { tap(); fileRef.current?.click(); }} aria-label="Add photos from your phone"
+            <button onClick={() => { tap(); fileRef.current?.click(); }} aria-label="Add photos or videos from your phone"
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.09]"><I n="plus" className="h-[18px] w-[18px]" /></button>
           )}
           <button onClick={() => { tap(); if (picking) stopPicking(); else setPicking(true); }} className="text-[0.9375rem] font-medium text-[var(--accent)]">{picking ? "Cancel" : "Select"}</button>
         </div>
       </header>
-      <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { onImport(e.target.files); e.target.value = ""; }} />
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { onImport(e.target.files); e.target.value = ""; }} />
 
       {groups.map((g) => (
         <section key={g.day} className="pb-5">
