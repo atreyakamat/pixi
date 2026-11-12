@@ -27,6 +27,7 @@ import { SettingsScreen } from "@/ui/Settings";
 import { keepStorage } from "@/ui/backup";
 import { canMakeClip, makeDevelopClip } from "@/ui/developClip";
 import { acceptMedia } from "@/ui/media";
+import { Learn } from "@/ui/Learn";
 import { LENSES, type LensId, lensById, loadLens, saveLens } from "@/ui/lenses";
 import type { LayerSpec } from "@/engine/types";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
@@ -1024,7 +1025,7 @@ export default function PixiApp() {
                 <Gallery items={galleryItems} selectedId={camId} favs={favs} recentIds={recentIds}
                   onPick={(id) => { setCamId(id); setView("camera"); }}
                   onFav={(id) => setFavs((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))}
-                  onEdit={settings.advanced ? (id) => openBuilder(id) : undefined} onNew={settings.advanced ? () => openBuilder() : undefined} onShare={() => setView("share")} onSettings={() => setView("settings")}
+                  onEdit={settings.advanced ? (id) => openBuilder(id) : undefined} onNew={settings.advanced ? () => openBuilder() : undefined} onShare={() => setView("share")} onSettings={() => setView("settings")} onLearn={() => setView("learn")}
                   onProfile={() => setView("profile")} avatar={profile.avatar} />
               )}
               {view === "builder" && dr.draft && (
@@ -1047,6 +1048,19 @@ export default function PixiApp() {
                   handle={profile.handle} onOpenProfile={() => setView("profile")} seed={stripSeed}
                   onOpenCamera={() => setView("camera")} onImportPhotos={importPhotos}
                   onExport={exportPages} onShare={sharePages} />
+              )}
+              {view === "learn" && (
+                <Learn onClose={() => setView("looks")} onGo={(d) => {
+                  // Each card lands on the screen it describes, with the right drawer already open.
+                  if (d === "camera") setView("camera");
+                  else if (d === "shelf") { setView("camera"); setShelfTab("cams"); setShelf(true); }
+                  else if (d === "lens") { setView("camera"); setShelfTab("lens"); setShelf(true); }
+                  else if (d === "looks") setView("looks");
+                  else if (d === "roll") setView("roll");
+                  else if (d === "build" || d === "frames" || d === "prints") setView("build");
+                  else if (d === "profile") setView("profile");
+                  else setView("settings");
+                }} />
               )}
               {view === "settings" && (
                 <SettingsScreen settings={settings} setSettings={setSettings} onClose={() => setView("looks")}

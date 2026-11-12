@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { I, type IconName } from "./icons";
 import { smooth, tap } from "./motion";
 
-export type View = "camera" | "looks" | "builder" | "roll" | "share" | "build" | "settings" | "profile";
+export type View = "camera" | "looks" | "builder" | "roll" | "share" | "build" | "settings" | "profile" | "learn";
 const TABS: [View, string, IconName][] = [
   ["camera", "Camera", "camera"],
   ["looks", "Looks", "looks"],
