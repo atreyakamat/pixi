@@ -474,13 +474,22 @@ export const LAYER_DEFS: Record<GpuLayerKind, LayerDef> = {
     ],
     body: /* glsl */ `
       vec2 asp = vec2(u_res.x/u_res.y, 1.0);
-      vec2 q = (uv - 0.5)*asp*2.0;
+      // Zoom is applied to the sampling coordinate first, so bend and zoom stay independent:
+      // multiplied in afterwards, every change of zoom also changed how strong the bend looked.
+      vec2 q = (uv - 0.5)*asp*2.0/p_zoom;
       float r2 = dot(q, q);
-      vec2 q2 = q*(1.0 + p_fisheye*r2*0.8)/p_zoom;
+      // A barrel bulge: the sampled radius grows more slowly than the output radius, so the middle
+      // swells and the edges compress. Dividing keeps every sample inside the frame.
+      // Multiplying (which this did) is the inverse map — it pinched the picture and dragged
+      // black wedges in from outside the texture at the corners.
+      vec2 q2 = q/(1.0 + p_fisheye*r2*0.55);
       vec2 suv = q2/(2.0*asp) + 0.5;
-      c = texture(u_tex, suv).rgb;
-      if (any(lessThan(suv, vec2(0.0))) || any(greaterThan(suv, vec2(1.0)))) c = vec3(0.0);
-      float m = mix(1.0, 1.0 - smoothstep(0.9, 1.0, length(q)), p_circle);
+      // A soft edge. The old per-pixel test cut to black with no blend, which left a stair-stepped
+      // border wherever a sample did fall outside (zoom below 1 still does).
+      vec2 edge = min(suv, 1.0 - suv);
+      float inside = smoothstep(0.0, 0.0045, min(edge.x, edge.y));
+      c = mix(vec3(0.0), texture(u_tex, clamp(suv, 0.0, 1.0)).rgb, inside);
+      float m = mix(1.0, 1.0 - smoothstep(0.86, 1.0, length(q)), p_circle);
       c *= m;
     `,
   },
