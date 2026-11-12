@@ -27,6 +27,8 @@ import { SettingsScreen } from "@/ui/Settings";
 import { keepStorage } from "@/ui/backup";
 import { canMakeClip, makeDevelopClip } from "@/ui/developClip";
 import { acceptMedia } from "@/ui/media";
+import { LENSES, type LensId, lensById, loadLens, saveLens } from "@/ui/lenses";
+import type { LayerSpec } from "@/engine/types";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
 import { ext as extOf, mime as mimeOf, useSettings } from "@/ui/settings";
 import { noteUse, topUsed } from "@/ui/recent";
@@ -150,7 +152,7 @@ export default function PixiApp() {
   const [stamp, setStamp] = useState("preset");
   const [brand, setBrand] = useState("All");
   const [shelf, setShelf] = useState(false);
-  const [shelfTab, setShelfTab] = useState<"cams" | "film" | "style">("cams");
+  const [shelfTab, setShelfTab] = useState<"cams" | "lens" | "film" | "style">("cams");
   const [proSheet, setProSheet] = useState(false);
   /** Flash, timer, aspect, grid, lenses: hidden until asked for. */
   const [controls, setControls] = useState(false);
@@ -174,6 +176,8 @@ export default function PixiApp() {
   const [wmId, setWmId] = useState<WatermarkId>("off");
   const [wmText, setWmText] = useState("");
   const [zoom, setZoom] = useState(1);
+  // The lens in front of the look. Kept out of the look itself so all 84 can be shot through any of them.
+  const [lens, setLens] = useState<LensId>("none");
   const [focus, setFocus] = useState<[number, number]>([0.5, 0.45]);
   const [portraitBlur, setPortraitBlur] = useState(0.8);
   const [pro, setPro] = useState<ProState>(PRO_DEFAULT);
@@ -206,11 +210,11 @@ export default function PixiApp() {
     return { ...moded, overlays: [...base, ...frame, ...watermarkOverlays(wmId, camDef, wmText)] };
   }, [camDef, film, effects, stamp, mode, pro, focus, portraitBlur, wmId, wmText, frameId, building, dr.draft]);
 
-  const optsRef = useRef({ preset, intensity, mirror: false, lcd, aspect, zoom });
+  const optsRef = useRef({ preset, intensity, mirror: false, lcd, aspect, zoom, lens: [] as LayerSpec[] });
   // The render loop reads the latest values through refs; they are written after render, never during it.
   useLayoutEffect(() => {
     viewRef.current = view; bootRef.current = boot; sheetRef.current = shelf || proSheet;
-    optsRef.current = { preset, intensity: compare && building ? 0 : intensity, mirror, lcd, aspect, zoom };
+    optsRef.current = { preset, intensity: compare && building ? 0 : intensity, mirror, lcd, aspect, zoom, lens: lensById(lens).layers };
   });
 
   // Restore and persist simple settings. Reading localStorage must wait for mount so server and first client render match.
@@ -219,7 +223,7 @@ export default function PixiApp() {
       const s = JSON.parse(localStorage.getItem("pixi:v2") ?? "{}");
       const mine = loadLooks();
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMyLooks(mine); setFavs(loadFavs()); setProfile(loadProfile());
+      setMyLooks(mine); setFavs(loadFavs()); setProfile(loadProfile()); setLens(loadLens());
       if (s.camId && (CAMERAS.some((c) => c.preset.id === s.camId) || mine.some((l) => l.id === s.camId))) setCamId(s.camId);
       if (s.filmId && FILMS.some((f) => f.id === s.filmId)) setFilmId(s.filmId);
       if (s.aspectId) setAspectId(s.aspectId);
@@ -906,6 +910,14 @@ export default function PixiApp() {
               <span className="pointer-events-none absolute inset-x-0 bottom-14 text-center text-[0.6875rem] text-white/55">Tap to set focus</span>
             )}
 
+            {lens !== "none" && cam.live && !busy && (
+              <button onClick={() => { tap(); setShelfTab("lens"); setShelf(true); }} onPointerDown={(e) => e.stopPropagation()}
+                aria-label={`${lensById(lens).name} lens fitted. Change it`}
+                className="t-footnote absolute right-3 top-3 whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 font-medium backdrop-blur-md">
+                {lensById(lens).name} lens
+              </button>
+            )}
+
             {still && !cam.live && (
               <button onClick={() => { tap(); void startCamera(cam.facing); }} onPointerDown={(e) => e.stopPropagation()}
                 data-pixi="still-pill" className="t-footnote absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/55 px-3.5 py-1.5 font-medium backdrop-blur-md">
@@ -1078,13 +1090,31 @@ export default function PixiApp() {
 
       <Sheet open={shelf} onClose={() => setShelf(false)} title="Camera shelf">
         <div className="mx-4 mb-4 flex rounded-xl bg-white/[0.07] p-[3px]">
-          {([["cams", "Cameras"], ["film", "Film"], ["style", "Style"]] as const).map(([k, l]) => (
+          {([["cams", "Cameras"], ["lens", "Lens"], ["film", "Film"], ["style", "Style"]] as const).map(([k, l]) => (
             <button key={k} onClick={() => { tap(); setShelfTab(k); }} className="relative flex-1 rounded-[9px] py-1.5 text-[0.8125rem] font-medium">
               {shelfTab === k && <motion.span layoutId="shelf-seg" className="absolute inset-0 rounded-[9px] bg-white/[0.14]" style={{ boxShadow: "0 1px 3px rgba(0,0,0,.4)" }} transition={smooth} />}
               <span className={`relative ${shelfTab === k ? "text-white" : "text-white/55"}`}>{l}</span>
             </button>
           ))}
         </div>
+
+        {shelfTab === "lens" && (
+          <div className="space-y-2 px-4 pb-2">
+            <p className="pb-1 text-[0.75rem] leading-relaxed text-white/40">
+              A lens goes in front of whatever camera you have loaded, so you can shoot any look through any of these.
+            </p>
+            {LENSES.map((l) => (
+              <button key={l.id} onClick={() => { tap(); setLens(l.id); saveLens(l.id); }}
+                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left ${l.id === lens ? "bg-white/[0.14] shadow-[inset_0_0_0_1.5px_var(--accent)]" : "bg-white/[0.05]"}`}>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.9375rem] font-semibold">{l.name}</span>
+                  <span className="mt-0.5 block text-[0.75rem] text-white/45">{l.hint}</span>
+                </span>
+                {l.id === lens && <I n="check" className="h-[18px] w-[18px] shrink-0 text-[var(--accent)]" w={2.4} />}
+              </button>
+            ))}
+          </div>
+        )}
 
         {shelfTab === "cams" && (
           <div className="space-y-5">
