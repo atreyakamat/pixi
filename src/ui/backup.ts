@@ -60,17 +60,17 @@ const idOk = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9_
  * validated, bytes are sniffed for a real image or video header, and existing ids are left alone.
  */
 export async function restoreRoll(file: Blob, onProgress?: (done: number, total: number) => void): Promise<RestoreResult> {
-  if (file.size > 2 * 1024 * 1024 * 1024) return { added: 0, skipped: 0, reason: "That backup is too large." };
+  if (file.size > 2 * 1024 * 1024 * 1024) return { added: 0, skipped: 0, reason: "That backup is over 2 GB, which is more than Pixi can open." };
   let entries: Unzipped;
   try {
     const buf = new Uint8Array(await file.arrayBuffer());
     entries = await new Promise((res, rej) => unzip(buf, { filter: (f) => f.originalSize <= MAX_FILE }, (e, d) => (e ? rej(e) : res(d))));
-  } catch { return { added: 0, skipped: 0, reason: "That file is not a Pixi backup." }; }
+  } catch { return { added: 0, skipped: 0, reason: "That isn't a Pixi backup. Pick the .zip Pixi made." }; }
   const raw = entries["pixi.json"];
-  if (!raw) return { added: 0, skipped: 0, reason: "That file is not a Pixi backup." };
+  if (!raw) return { added: 0, skipped: 0, reason: "That isn't a Pixi backup. Pick the .zip Pixi made." };
   let m: Partial<Manifest>;
-  try { m = JSON.parse(new TextDecoder().decode(raw)); } catch { return { added: 0, skipped: 0, reason: "The backup's index is damaged." }; }
-  if (m.app !== "pixi" || !Array.isArray(m.items)) return { added: 0, skipped: 0, reason: "That file is not a Pixi backup." };
+  try { m = JSON.parse(new TextDecoder().decode(raw)); } catch { return { added: 0, skipped: 0, reason: "That backup is damaged. Try another copy." }; }
+  if (m.app !== "pixi" || !Array.isArray(m.items)) return { added: 0, skipped: 0, reason: "That isn't a Pixi backup. Pick the .zip Pixi made." };
 
   const items: RollItem[] = [];
   let skipped = 0;

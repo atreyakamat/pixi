@@ -16,7 +16,7 @@ Pixi's security model is simple: **there is no server**. The app is static files
 | 6 | Backup zip import is a new untrusted-input surface | — | Built with validation from the start |
 | 7 | `npm audit` (production dependencies) | — | 0 vulnerabilities |
 | 8 | Secrets in the tree | — | None found |
-| 9 | Debug APK only; no release signing or Play config yet | Info | Open, by design for now |
+| 9 | Debug APK only; no release signing or Play config yet | Info | Signing config added (key stays outside the repo, see `docs/RELEASE.md`); R8 shrinking left off on purpose |
 | 10 | WebRTC Nearby has no authentication beyond the QR exchange | Info | Accepted, documented |
 
 ## Findings
@@ -85,6 +85,26 @@ Only a debug APK exists. Before any public release: a release keystore kept outs
 ### 10. Nearby (accepted)
 
 Phone-to-phone transfer uses WebRTC over the local network with no STUN/TURN and no signalling server; the offer and answer travel as QR codes the two people show each other. That exchange is the authentication: whoever can scan the QR is who gets connected. The data channel is DTLS-encrypted by the protocol. Received files pass through `acceptMedia()` (finding 2) and are size-capped at 400 MB.
+
+## Addendum, polish round
+
+- New production dependencies: `@capacitor/haptics` and `@capacitor/text-zoom` (both first-party Capacitor). `npm audit --omit=dev`: still 0. Haptics adds Android's `VIBRATE` permission, a normal (install-time, no prompt) permission.
+- The shutter click is synthesised with Web Audio. No audio file is loaded, so the CSP is unchanged.
+- The frame meter's numbers stay in memory on the phone; nothing is stored or sent.
+- Onboarding no longer asks for the microphone or storage up front. Each is requested the first time it is needed (recording video, saving a photo), which is the least-privilege order.
+
+## Addendum, profiles and landing page
+
+- **New untrusted input: profile codes** (`PIXIU1.…`, from a link fragment, a QR or a paste). `decodeProfile` caps name (40), bio (90), re-cleans the handle to `[a-z0-9._]`, keeps at most three looks, accepts built-in look ids only if they exist, and sends custom looks through `sanitizeLook`. Decompressed size is capped at 32 KB. All of it is rendered as React text, never as HTML. Tested with a hostile link (markup in the name, a script tag as the handle, a 5,000-character bio, an unknown layer kind) in `scripts/e2e-profile.mjs`.
+- **Privacy of the link.** The profile is in the URL fragment, which browsers do not send to servers, so the static host's logs never contain it. The avatar and photos are not in the link at all.
+- **Handles are not identities.** Nothing verifies a handle, so a profile link proves nothing about who made it. The UI never presents a profile as verified.
+- **Landing page.** Same CSP as the app; the e2e test asserts it makes zero requests to any other host. Its only outbound links are to the GitHub repository.
+- **`/u/` writes to storage** (adds looks to this browser's Pixi) only when the person presses the button, never on load.
+
+## Addendum, offline worker and signatures
+
+- **Service worker** (`public/sw.js`, web build only). Same-origin GET requests only; it never fetches or caches another host, and the CSP still applies. It stores the site's own static files, never photos. A stale worker is the usual risk with these: `sw.js` is served `no-cache` and re-registered under a new address on every build, and pages are network-first, so an update cannot be pinned by an old cache.
+- **Signature on layouts.** The text comes from the person's own handle, already restricted to `[a-z0-9._]`, and is drawn to canvas.
 
 ## Input boundaries, reviewed
 

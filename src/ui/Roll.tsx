@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { I } from "./icons";
 import { useObjectUrl, useObjectUrls } from "./useObjectUrl";
-import { fade, press, sheet, snappy, tap } from "./motion";
+import { fade, morph, press, snappy, tap } from "./motion";
 
 export interface RollShot { id: string; url: string; kind: "photo" | "video"; ext: string; blob: Blob; created: number; exported?: boolean }
 
@@ -52,15 +52,10 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
   if (shots.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 px-10 text-center">
-        <div className="flex h-[68px] w-[68px] items-center justify-center rounded-[20px] bg-white/[0.06] text-white/35"><I n="roll" className="h-8 w-8" w={1.5} /></div>
-        <div>
-          <h2 className="text-[19px] font-semibold">Nothing here yet</h2>
-          <p className="mt-1.5 text-[15px] leading-relaxed text-white/45">Everything you shoot is kept here, and stays after you close Pixi.</p>
-        </div>
-        <div className="mt-1 flex gap-2">
-          <motion.button whileTap={press} transition={snappy} onClick={onCamera} className="rounded-full bg-white px-6 py-3 text-[15px] font-semibold text-black">Open the camera</motion.button>
-          <motion.button whileTap={press} transition={snappy} onClick={() => fileRef.current?.click()} className="rounded-full bg-white/[0.1] px-6 py-3 text-[15px] font-semibold">From phone</motion.button>
-        </div>
+        <h2 className="t-title2">Your roll is empty</h2>
+        <p className="t-body max-w-[17rem] text-white/50">Everything you shoot lands here and stays on this phone.</p>
+        <motion.button whileTap={press} transition={snappy} onClick={() => { tap(); onCamera(); }} className="t-headline mt-2 rounded-full bg-white px-7 py-3.5 text-black">Take a photo</motion.button>
+        <button onClick={() => fileRef.current?.click()} className="t-subhead mt-1 py-2 text-white/45 underline-offset-4 active:underline">or add from your phone</button>
         <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { onImport(e.target.files); e.target.value = ""; }} />
       </div>
     );
@@ -70,31 +65,31 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
     <>
       <header className="safe-t flex items-end justify-between px-4 pb-3 pt-3">
         <div>
-          <h1 className="text-[28px] font-bold tracking-[-0.02em]">Roll</h1>
-          <p className="text-[13px] text-white/40">{picking ? `${chosen.length} selected` : `${shots.length} ${shots.length === 1 ? "shot" : "shots"}`}</p>
+          <h1 className="text-[1.75rem] font-bold tracking-[-0.02em]">Roll</h1>
+          <p className="text-[0.8125rem] text-white/40">{picking ? `${chosen.length} selected` : `${shots.length} ${shots.length === 1 ? "shot" : "shots"}`}</p>
         </div>
         <div className="flex items-center gap-2 pb-1">
           {!picking && (
             <button onClick={() => { tap(); fileRef.current?.click(); }} aria-label="Add photos from your phone"
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.09]"><I n="plus" className="h-[18px] w-[18px]" /></button>
           )}
-          <button onClick={() => { tap(); if (picking) stopPicking(); else setPicking(true); }} className="text-[15px] font-medium text-[var(--accent)]">{picking ? "Cancel" : "Select"}</button>
+          <button onClick={() => { tap(); if (picking) stopPicking(); else setPicking(true); }} className="text-[0.9375rem] font-medium text-[var(--accent)]">{picking ? "Cancel" : "Select"}</button>
         </div>
       </header>
       <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { onImport(e.target.files); e.target.value = ""; }} />
 
       {groups.map((g) => (
         <section key={g.day} className="pb-5">
-          <h2 className="px-4 pb-1.5 text-[13px] font-semibold text-white/50">{g.day}</h2>
+          <h2 className="px-4 pb-1.5 text-[0.8125rem] font-semibold text-white/50">{g.day}</h2>
           <div className="grid grid-cols-3 gap-[3px]">
             {g.items.map((s, i) => (
-              <motion.button key={s.id} layoutId={`shot-${s.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 9) * 0.02, duration: 0.25 }}
+              <motion.button key={s.id} layoutId={`shot-${s.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ opacity: { delay: Math.min(i, 9) * 0.02, duration: 0.25 }, layout: morph }}
                 onClick={() => (picking ? toggle(s.id) : (tap(), setOpen(s.id)))} aria-label={picking ? `Select ${s.kind}` : `Open ${s.kind} from ${g.day}`} aria-pressed={picking ? chosen.includes(s.id) : undefined}
                 className="relative aspect-square overflow-hidden bg-white/[0.04]">
                 {s.kind === "photo"
                   ? <img src={s.url} alt="" className="h-full w-full object-cover" loading="lazy" />
                   : <video src={s.url} muted playsInline className="h-full w-full object-cover" />}
-                {s.kind === "video" && <span className="absolute bottom-1 right-1.5 text-[10px] font-semibold drop-shadow">VIDEO</span>}
+                {s.kind === "video" && <span className="absolute bottom-1 right-1.5 text-[0.6875rem] font-semibold drop-shadow">VIDEO</span>}
                 {picking && (
                   <span className={`absolute inset-0 transition-colors ${chosen.includes(s.id) ? "bg-black/35" : ""}`}>
                     <span className={`absolute bottom-1.5 right-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full border-[1.5px] ${chosen.includes(s.id) ? "border-[var(--accent)] bg-[var(--accent)] text-black" : "border-white/80 bg-black/25"}`}>
@@ -112,8 +107,8 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
         <section className="px-4 pb-24 pt-1">
           <button onClick={() => { tap(); setBin((b) => !b); }} aria-expanded={bin} className="flex w-full items-center justify-between rounded-xl bg-white/[0.05] px-4 py-3 text-left">
             <span>
-              <span className="block text-[15px] font-medium">Recently deleted</span>
-              <span className="block text-[12px] text-white/40">{trash.length} {trash.length === 1 ? "shot" : "shots"} · kept for 30 days</span>
+              <span className="block text-[0.9375rem] font-medium">Recently deleted</span>
+              <span className="block text-[0.75rem] text-white/40">{trash.length} {trash.length === 1 ? "shot" : "shots"} · kept for 30 days</span>
             </span>
             <I n="chevR" className={`h-[18px] w-[18px] text-white/35 transition-transform ${bin ? "rotate-90" : ""}`} />
           </button>
@@ -125,13 +120,13 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
                     <div key={t.id} className="relative aspect-square overflow-hidden bg-white/[0.04]">
                       <img src={binUrls[t.id]} alt="" className="h-full w-full object-cover opacity-55" />
                       <div className="absolute inset-x-0 bottom-0 flex">
-                        <button onClick={() => { tap(); onRestore(t.id); }} className="flex-1 bg-black/70 py-1.5 text-[11px] font-semibold">Put back</button>
-                        <button onClick={() => { tap(); onDrop(t.id); }} aria-label="Delete for good" className="bg-black/70 px-2 py-1.5 text-[11px] font-semibold text-[#ff453a]">✕</button>
+                        <button onClick={() => { tap(); onRestore(t.id); }} className="flex-1 bg-black/70 py-1.5 text-[0.6875rem] font-semibold">Put back</button>
+                        <button onClick={() => { tap(); onDrop(t.id); }} aria-label="Delete for good" className="bg-black/70 px-2 py-1.5 text-[0.6875rem] font-semibold text-[#ff453a]">✕</button>
                       </div>
                     </div>
                   ))}
                 </div>
-                <button onClick={() => { tap(); onEmptyBin(); setBin(false); }} className="mt-2 w-full rounded-xl bg-white/[0.05] py-2.5 text-[13px] font-medium text-[#ff453a]">Empty the bin</button>
+                <button onClick={() => { tap(); onEmptyBin(); setBin(false); }} className="mt-2 w-full rounded-xl bg-white/[0.05] py-2.5 text-[0.8125rem] font-medium text-[#ff453a]">Empty the bin</button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -142,7 +137,7 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
         {picking && chosen.length > 0 && (
           <motion.div key="bar" initial={{ y: 70 }} animate={{ y: 0 }} exit={{ y: 70 }} transition={snappy}
             className="fixed inset-x-0 bottom-[66px] z-30 mx-auto flex w-full max-w-md gap-2 px-4 pb-2">
-            <button onClick={() => { onMakeStrip(chosen); stopPicking(); }} className="flex-1 rounded-2xl bg-white py-3.5 text-[15px] font-semibold text-black shadow-[0_8px_30px_rgba(0,0,0,.7)]">
+            <button onClick={() => { onMakeStrip(chosen); stopPicking(); }} className="flex-1 rounded-2xl bg-white py-3.5 text-[0.9375rem] font-semibold text-black shadow-[0_8px_30px_rgba(0,0,0,.7)]">
               Build with {chosen.length}
             </button>
             <button aria-label="Delete selected" onClick={() => { chosen.forEach((id) => { const s2 = shots.find((x) => x.id === id); if (s2) onDelete(s2); }); stopPicking(); }}
@@ -156,13 +151,15 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
           <motion.div key="viewer" className="fixed inset-0 z-[60] flex flex-col bg-black" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade}>
             <div className="safe-t flex items-center justify-between px-3 pt-2">
               <motion.button whileTap={press} transition={snappy} aria-label="Close" onClick={() => setOpen(null)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.09]"><I n="close" className="h-[19px] w-[19px]" /></motion.button>
-              <span className="text-[13px] tabular-nums text-white/45">{idx + 1} of {shots.length}</span>
+              <span className="text-[0.8125rem] tabular-nums text-white/45">{idx + 1} of {shots.length}</span>
               <span className="w-10" />
             </div>
 
-            <motion.div layoutId={`shot-${cur.id}`} transition={sheet} className="relative min-h-0 flex-1" drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.45}
+            {/* The tile grows into this and shrinks back on close; swipe sideways for the next shot, down to close. */}
+            <motion.div layoutId={`shot-${cur.id}`} transition={morph} className="relative min-h-0 flex-1" drag dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }} dragElastic={0.45}
               onDragEnd={(_, i) => {
-                if (i.offset.x < -70 && shots[idx + 1]) { tap(); setOpen(shots[idx + 1].id); }
+                if (i.offset.y > 110 && Math.abs(i.offset.y) > Math.abs(i.offset.x)) { tap(); setOpen(null); }
+                else if (i.offset.x < -70 && shots[idx + 1]) { tap(); setOpen(shots[idx + 1].id); }
                 else if (i.offset.x > 70 && shots[idx - 1]) { tap(); setOpen(shots[idx - 1].id); }
               }}>
               {cur.kind === "photo"
@@ -170,16 +167,16 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
                 : full && <video src={full} controls autoPlay loop playsInline className="h-full w-full object-contain" />}
             </motion.div>
 
-            <div className="flex items-center justify-center gap-4 px-6 pb-5 pt-4 safe-b">
-              <motion.button whileTap={press} transition={snappy} onClick={() => onSave(cur)} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white py-3.5 text-[15px] font-semibold text-black">
-                <I n="save" className="h-[18px] w-[18px]" /> {cur.exported ? "Saved · save again" : "Save to phone"}
+            <div className="flex items-center justify-center gap-2.5 px-4 pb-5 pt-4 safe-b">
+              <motion.button whileTap={press} transition={snappy} onClick={() => onSave(cur)} aria-label={cur.exported ? "Saved to your phone. Save again" : "Save to your phone"} className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-white px-3 py-3.5 text-[0.9375rem] font-semibold text-black">
+                <I n={cur.exported ? "check" : "save"} className="h-[18px] w-[18px] shrink-0" /> <span className="truncate">{cur.exported ? "Saved" : "Save"}</span>
               </motion.button>
               {onClip && cur.kind === "photo" && (
-                <motion.button whileTap={press} transition={snappy} aria-label="Make a develop clip" title="Develop clip" onClick={() => onClip(cur)} className="flex h-[50px] w-[50px] items-center justify-center rounded-2xl bg-white/[0.09]"><I n="film" className="h-[19px] w-[19px]" /></motion.button>
+                <motion.button whileTap={press} transition={snappy} aria-label="Make a develop clip" title="Develop clip" onClick={() => onClip(cur)} className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-white/[0.09]"><I n="film" className="h-[19px] w-[19px]" /></motion.button>
               )}
-              <motion.button whileTap={press} transition={snappy} aria-label="Share" onClick={() => onShare(cur)} className="flex h-[50px] w-[50px] items-center justify-center rounded-2xl bg-white/[0.09]"><I n="share" className="h-[19px] w-[19px]" /></motion.button>
+              <motion.button whileTap={press} transition={snappy} aria-label="Share" onClick={() => onShare(cur)} className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-white/[0.09]"><I n="share" className="h-[19px] w-[19px]" /></motion.button>
               <motion.button whileTap={press} transition={snappy} aria-label="Delete" onClick={() => { const next = shots[idx + 1] ?? shots[idx - 1]; onDelete(cur); setOpen(next?.id ?? null); }}
-                className="flex h-[50px] w-[50px] items-center justify-center rounded-2xl bg-white/[0.09] text-[#ff453a]"><I n="trash" className="h-[19px] w-[19px]" /></motion.button>
+                className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-white/[0.09] text-[#ff453a]"><I n="trash" className="h-[19px] w-[19px]" /></motion.button>
             </div>
           </motion.div>
         )}

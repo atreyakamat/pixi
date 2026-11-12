@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root { --background: #07070a; --foreground: #f4f1ea; --accent: #ff7a1a; }
+:root { --background: #07070a; --foreground: #f4f1ea; --accent: #ffc247; }
 
 @theme inline {
   --color-background: var(--background);
@@ -28,6 +28,26 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* Keyboard focus is visible; mouse and touch focus is not. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :focus:not(:focus-visible) { outline: none; }
+/* Text fields show a caret; a ring around them as well is noise. */
+input[type="text"]:focus-visible, input:not([type]):focus-visible, textarea:focus-visible { outline: none; }
 
-:root { --accent: #ffc247; }
 .hair { box-shadow: inset 0 0 0 1px rgba(255,255,255,.09); }
+
+/*
+ * Type scale. Eleven steps from Apple's Human Interface Guidelines, in rem, so text follows the
+ * person's own text size (the html font size is set from the phone's setting on Android and from
+ * the browser's on the web). Every screen uses these steps and nothing in between.
+ */
+.t-large   { font-size: 2.125rem; line-height: 1.2;  font-weight: 700; letter-spacing: -0.022em; }
+.t-title1  { font-size: 1.75rem;  line-height: 1.21; font-weight: 700; letter-spacing: -0.02em; }
+.t-title2  { font-size: 1.375rem; line-height: 1.27; font-weight: 700; letter-spacing: -0.016em; }
+.t-title3  { font-size: 1.25rem;  line-height: 1.25; font-weight: 600; letter-spacing: -0.012em; }
+.t-headline{ font-size: 1.0625rem;line-height: 1.29; font-weight: 600; letter-spacing: -0.008em; }
+.t-body    { font-size: 1.0625rem;line-height: 1.41; font-weight: 400; letter-spacing: -0.008em; }
+.t-callout { font-size: 1rem;     line-height: 1.31; font-weight: 400; }
+.t-subhead { font-size: 0.9375rem;line-height: 1.33; font-weight: 400; }
+.t-footnote{ font-size: 0.8125rem;line-height: 1.38; font-weight: 400; }
+.t-caption1{ font-size: 0.75rem;  line-height: 1.33; font-weight: 400; }
+.t-caption2{ font-size: 0.6875rem;line-height: 1.18; font-weight: 500; letter-spacing: 0.01em; }
+
+/* Spacing is on an 8 pt grid (Tailwind's 2, 4, 6, 8…); screens use 16 pt side margins (px-4) and 24 pt between groups. */

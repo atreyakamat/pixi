@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "build:app": "PIXI_TARGET=app next build && cap sync android",
-    "apk": "npm run build:app && cd android && ./gradlew assembleDebug"
+    "apk": "npm run build:app && cd android && ./gradlew assembleDebug",
+    "aab": "npm run build:app && cd android && ./gradlew bundleRelease",
+    "check": "tsc --noEmit && eslint src"
   },
   "dependencies": {
     "@capacitor-community/media": "^9.1.0",
@@ -16,7 +18,9 @@
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.6.0",
     "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/haptics": "^8.0.2",
     "@capacitor/share": "^8.0.3",
+    "@capacitor/text-zoom": "^8.0.1",
     "fflate": "^0.8.3",
     "framer-motion": "^14.12.0",
     "idb": "^8.0.4",

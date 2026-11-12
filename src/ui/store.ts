@@ -53,7 +53,7 @@ const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max
 const num = (v: unknown, lo: number, hi: number, d: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 
 /** Untrusted input: only known layer kinds, every parameter clamped to its declared range. */
-function sanitize(raw: { n?: unknown; b?: unknown; l?: unknown; o?: unknown; a?: unknown }): SavedLook | null {
+export function sanitizeLook(raw: { n?: unknown; b?: unknown; l?: unknown; o?: unknown; a?: unknown }): SavedLook | null {
   if (!Array.isArray(raw.l)) return null;
   const layers: LayerSpec[] = [];
   for (const it of raw.l.slice(0, MAX_LAYERS)) {
@@ -90,7 +90,7 @@ export async function decodeLook(code: string): Promise<SavedLook | null> {
     const bytes = unb64u(body);
     const raw = tag === "PIXI1" ? await pipe(bytes, new DecompressionStream("deflate-raw")) : bytes;
     if (raw.length > 64_000) return null;
-    return sanitize(JSON.parse(new TextDecoder().decode(raw)));
+    return sanitizeLook(JSON.parse(new TextDecoder().decode(raw)));
   } catch { return null; }
 }
 

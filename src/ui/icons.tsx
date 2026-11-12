@@ -17,6 +17,8 @@ const P: Record<string, string> = {
   image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M9 9h.01",
   chevL: "m15 5-7 7 7 7",
   chevR: "m9 5 7 7-7 7",
+  chevD: "m6 9 6 6 6-6",
+  user: "M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM4.5 20a7.5 7.5 0 0 1 15 0",
   wand: "M5 19 17 7M14 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1ZM19 12l.7 1.3L21 14l-1.3.7L19 16l-.7-1.3L17 14l1.3-.7Z",
   sliders: "M5 6h9M18 6h1M5 12h3M12 12h7M5 18h11M20 18h-1M14 4v4M8 10v4M16 16v4",
   lock: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z",

@@ -1,0 +1,20 @@
+// The privacy page: reachable from Settings, scrolls, and its back link returns to the app.
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"] });
+const p = await b.newPage(); await p.setViewport({ width: 390, height: 700, deviceScaleFactor: 2 });
+const errs=[]; p.on("pageerror",e=>errs.push("PE "+e)); p.on("console",m=>{ if(m.type()==="error") errs.push("CE "+m.text()); });
+const s=ms=>new Promise(r=>setTimeout(r,ms));
+const click=(re)=>p.evaluate(x=>{const r=new RegExp(x,"i");const el=[...document.querySelectorAll("button,a")].find(b=>r.test(b.textContent.trim())||r.test(b.getAttribute("aria-label")||""));el?.click();return !!el;},re.source);
+await p.evaluateOnNewDocument(()=>localStorage.setItem("pixi:onboarded","1"));
+await p.goto("http://localhost:3111",{waitUntil:"domcontentloaded"}); await s(5000);
+await click(/^Looks$/); await s(1500); await click(/^Settings$/); await s(900);
+const R={};
+R.link = await click(/^Privacy policy$/); await s(2500);
+R.url = new URL(p.url()).pathname;
+R.heading = await p.evaluate(()=>document.querySelector("h1")?.textContent);
+R.scrolls = await p.evaluate(async()=>{ const el=document.scrollingElement; const m=document.querySelector("main"); window.scrollTo(0,400); m.scrollTo(0,400); await new Promise(r=>setTimeout(r,200)); return (el.scrollTop>0)||(m.scrollTop>0)||(m.scrollHeight<=innerHeight); });
+await p.screenshot({path:"/tmp/privacy.png"});
+await click(/Back to Pixi/); await s(4000);
+R.back = new URL(p.url()).pathname === "/" && await p.evaluate(()=>!!document.querySelector('nav[aria-label="Main"]'));
+console.log(JSON.stringify(R)); console.log("errors:",JSON.stringify(errs)); await b.close();
+if (!(R.link&&R.heading==="Privacy"&&R.scrolls&&R.back)||errs.length) process.exit(1);

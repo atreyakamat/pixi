@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { MotionConfig } from "framer-motion";
+import { Offline } from "@/ui/Offline";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,7 +40,7 @@ const CSP = [
   "form-action 'none'",
 ].join("; ");
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         {/* Every framer-motion animation in the app honours the system reduce-motion setting. */}
         <MotionConfig reducedMotion="user">{children}</MotionConfig>
+        <Offline />
       </body>
     </html>
   );

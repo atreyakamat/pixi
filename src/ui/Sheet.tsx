@@ -16,7 +16,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
             onDragEnd={(_, i) => { if (i.offset.y > 110 || i.velocity.y > 700) onClose(); }}>
             <div className="flex shrink-0 flex-col items-center pt-2.5">
               <span className="h-[5px] w-9 rounded-full bg-white/18" />
-              <h2 className="pb-2.5 pt-3 text-[13px] font-semibold text-white/50">{title}</h2>
+              <h2 className="pb-2.5 pt-3 text-[0.8125rem] font-semibold text-white/50">{title}</h2>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-5">{children}</div>
           </motion.div>

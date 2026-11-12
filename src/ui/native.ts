@@ -87,7 +87,7 @@ export async function saveToGallery(blob: Blob, name: string, kind: "photo" | "v
       await Filesystem.writeFile({ path: `${ALBUM}/${safeName(name)}`, data: await toBase64(blob), directory: Directory.Documents, recursive: true });
       return { ok: true, where: "files" };
     } catch {
-      return { ok: false, reason: e instanceof Error && e.message ? e.message : "Your phone would not let Pixi write to the gallery." };
+      return { ok: false, reason: plainSaveError(e) };
     }
   }
 }
@@ -102,7 +102,7 @@ export function downloadInBrowser(blob: Blob, name: string): SaveResult {
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
     return { ok: true, where: "download" };
   } catch {
-    return { ok: false, reason: "This browser blocked the download. Use Share instead." };
+    return { ok: false, reason: "Your browser blocked the download. Tap Share to save it instead." };
   }
 }
 
@@ -157,6 +157,18 @@ export async function shareOrSave(blob: Blob, name: string): Promise<SaveResult>
   return downloadInBrowser(blob, name);
 }
 
+/**
+ * Platform errors arrive as things like "java.lang.SecurityException: ..." — true, but useless to a
+ * person. This keeps the detail in the console and gives them what happened and what to do.
+ */
+export function plainSaveError(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e ?? "");
+  if (m) console.warn("[pixi] save failed:", m);
+  if (/permission|denied|security|not allowed/i.test(m)) return "Pixi isn't allowed to save photos. Allow Photos for Pixi in your phone's Settings, or tap Share.";
+  if (/space|quota|full|ENOSPC/i.test(m)) return "Your phone is out of space. Free some up, or tap Share to save it somewhere else.";
+  return "Your phone didn't let Pixi save that. Tap Share to save it another way.";
+}
+
 export function saveMessage(r: SaveResult): string {
   if (!r.ok) return r.reason;
   return r.where === "gallery" ? "Saved to your gallery" : r.where === "files" ? "Saved to Documents/Pixi" : "Downloaded";
@@ -173,6 +185,17 @@ export async function exportDocument(blob: Blob, name: string): Promise<SaveResu
     try { await Share.share({ files: [f.uri], dialogTitle: "Share or save" }); } catch { /* person closed the sheet; the file is still in Documents */ }
     return { ok: true, where: "files" };
   } catch (e) {
-    return { ok: false, reason: e instanceof Error && e.message ? e.message : "Your phone would not let Pixi write the file." };
+    return { ok: false, reason: plainSaveError(e) };
   }
+}
+
+/** A link or a line of text to the share sheet; copied to the clipboard where there is no share sheet. */
+export async function shareText(text: string, title = "Pixi"): Promise<"shared" | "copied" | "failed"> {
+  try {
+    if (isNative()) { await Share.share({ text, title, dialogTitle: title }); return "shared"; }
+    if (navigator.share) { await navigator.share({ text, title }); return "shared"; }
+  } catch (e) {
+    if ((e as { name?: string })?.name === "AbortError") return "shared"; // the person closed the sheet
+  }
+  try { await navigator.clipboard.writeText(text); return "copied"; } catch { return "failed"; }
 }

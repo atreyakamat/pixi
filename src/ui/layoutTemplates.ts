@@ -260,7 +260,8 @@ const filmstrip: Layout = {
 /* ---------------------------------------------------------------- */
 
 const QW = 1080, QH = 1350;
-const SLIDES = { min: 2, max: 10 };
+/** No ceiling on pages: Build keeps only the pages near the one on screen in memory and exports one at a time. */
+const SLIDES = { min: 1, max: 9999 };
 
 /** The warm, slightly faded cast of a print that has sat in a drawer. Drawn over everything. */
 const aged = (grain: number, warmth = 0.1): Decor[] => [
@@ -372,6 +373,71 @@ const contact: Layout = {
   ],
 };
 
+/* The modern set: what feeds look like now. Clean type, big radii, the photo doing the work. */
+
+const glass: Layout = {
+  id: "ca-glass", name: "Glass", family: "Carousel", kind: "carousel",
+  blurb: "Your photo, sharp, floating over a soft blur of itself. Works with any picture.",
+  w: QW, h: QH, bg: "#111111", cut: "#000000", slides: SLIDES, exportScale: 1,
+  slots: [{ x: 96, y: 132, w: 888, h: 888, r: 60, shadow: 60 }],
+  fields: [f("caption", "Caption", "", 60)],
+  under: [{ k: "backdrop", dim: 0.34 }],
+  over: [
+    { k: "rect", x: 96, y: 132, w: 888, h: 888, r: 60, stroke: "rgba(255,255,255,.28)", lw: 2 },
+    { k: "text", x: QW / 2, y: 1128, t: "{caption}", size: 44, color: "#FFFFFF", font: "sans", weight: "600", align: "center", wrap: 880, lh: 54 },
+    { k: "pill", x: QW / 2, y: 1262, t: "{index} / {total}", size: 24, fg: "#FFFFFF", bg: "rgba(255,255,255,.18)", align: "center" },
+    { k: "grain", amount: 0.06, seed: 5 },
+  ],
+};
+
+const noir: Layout = {
+  id: "ca-noir", name: "Noir", family: "Carousel", kind: "carousel",
+  blurb: "Black, rounded, bold. The caption in heavy type under a big photo.",
+  w: QW, h: QH, bg: "#0A0A0B", cut: "#000000", slides: SLIDES, exportScale: 1,
+  slots: [{ x: 56, y: 56, w: 968, h: 1000, r: 48 }],
+  fields: [f("caption", "Caption", "", 60)],
+  under: [],
+  over: [
+    { k: "text", x: 64, y: 1150, t: "{caption}", size: 50, color: "#FFFFFF", font: "sans", weight: "700", wrap: 950, lh: 58 },
+    { k: "text", x: 64, y: 1294, t: "{index2} — {total2}", size: 24, color: "rgba(255,255,255,.5)", font: "mono", track: 4 },
+    { k: "text", x: QW - 64, y: 1294, t: "{date}", size: 24, color: "rgba(255,255,255,.5)", font: "mono", align: "right", track: 3 },
+    { k: "grain", amount: 0.05, seed: 9 },
+  ],
+};
+
+const editorial: Layout = {
+  id: "ca-editorial", name: "Editorial", family: "Carousel", kind: "carousel",
+  blurb: "A magazine page: a big serif number, a thin rule, and room to breathe.",
+  w: QW, h: QH, bg: "#F4F1EA", cut: "#ffffff", slides: SLIDES, exportScale: 1,
+  slots: [{ x: 72, y: 300, w: 936, h: 800 }],
+  fields: [f("title", "Section", "", 26), f("caption", "Caption", "", 70)],
+  under: [],
+  over: [
+    { k: "text", x: 64, y: 222, t: "{index2}", size: 200, color: "#1B1917", font: "serif" },
+    { k: "text", x: QW - 72, y: 126, t: "{title}", size: 24, color: "#8A8378", font: "sans", weight: "600", caps: true, track: 6, align: "right" },
+    { k: "text", x: QW - 72, y: 222, t: "of {total2}", size: 30, color: "#8A8378", font: "serif", italic: true, align: "right" },
+    { k: "line", x1: 72, y1: 258, x2: QW - 72, y2: 258, color: "#1B1917", lw: 3 },
+    { k: "text", x: 72, y: 1178, t: "{caption}", size: 40, color: "#1B1917", font: "serif", italic: true, wrap: 936, lh: 50 },
+    { k: "text", x: 72, y: 1300, t: "{date}", size: 22, color: "#8A8378", font: "mono", track: 3 },
+    { k: "grain", amount: 0.05, seed: 3 },
+  ],
+};
+
+const dump: Layout = {
+  id: "ca-dump", name: "Photo Dump", family: "Carousel", kind: "carousel",
+  blurb: "A print dropped on the table, a little crooked, with a strip of tape. For the camera-roll post.",
+  w: QW, h: QH, bg: "#E9E6DF", cut: "#ffffff", slides: SLIDES, exportScale: 1,
+  slots: [{ x: 150, y: 150, w: 780, h: 800, rot: -2.4, shadow: 36, mat: { w: 34, color: "#FFFEFA", foot: 120 } }],
+  fields: [f("caption", "Caption", "", 48)],
+  under: [],
+  over: [
+    { k: "rect", x: 455, y: 88, w: 170, h: 54, r: 3, fill: "rgba(222,205,150,.72)" },
+    { k: "text", x: QW / 2, y: 1204, t: "{caption}", size: 44, color: "#2A2622", font: "serif", italic: true, align: "center", wrap: 860, lh: 52 },
+    { k: "text", x: QW / 2, y: 1306, t: "{index} / {total}", size: 22, color: "#8F887C", font: "mono", align: "center", track: 4 },
+    { k: "grain", amount: 0.08, seed: 14 },
+  ],
+};
+
 /* ---------------------------------------------------------------- */
 /* Prints. Drawn at one third of 300 DPI and exported at three times, so a 4×6 comes   */
 /* out at 1200×1800 and an A4 sticker sheet at 2481×3507.                               */
@@ -470,7 +536,7 @@ export const LAYOUTS: Layout[] = [
   // cards
   card, polaroid,
   // carousels
-  instant, fullFrame, postcard, mounted,
+  instant, glass, noir, editorial, dump, fullFrame, postcard, mounted,
   // sheets
   contact,
   // prints
