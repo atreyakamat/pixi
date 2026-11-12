@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
-const isApp = process.env.PIXI_TARGET === "app";
+// Three targets. "app": static files for the Android wrapper, root is the camera.
+// "web": static files for a host like Netlify, root is the landing page and the app is at /app/.
+// Unset: the dev server, laid out like "web".
+const target = process.env.PIXI_TARGET;
+const isApp = target === "app" || target === "web";
 
 const nextConfig: NextConfig = {
   ...(isApp ? { output: "export" as const, images: { unoptimized: true }, trailingSlash: true } : {}),

@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import jsQR from "jsqr";
 import { NearbyPanel, type NearbyShot } from "./NearbyPanel";
 import { decodeLook, encodeLook, type SavedLook } from "./store";
+import { profileCodeFrom } from "./profile";
 import { AnimatePresence, motion } from "framer-motion";
 import { I } from "./icons";
 import { Card } from "./Card";
@@ -16,12 +17,14 @@ interface Props {
   startCamera: () => void;
   getFrame: () => ImageData | null;
   onImport: (l: SavedLook) => void;
+  /** Someone else's profile code: adds their looks and returns what to tell the person, or null if it is not one. */
+  onImportProfile: (code: string) => Promise<string | null>;
   shots: NearbyShot[];
   onReceiveFile: (blob: Blob, name: string) => void;
   onClose: () => void;
 }
 
-export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onImport, shots, onReceiveFile, onClose }: Props) {
+export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onImport, onImportProfile, shots, onReceiveFile, onClose }: Props) {
   const [sel, setSel] = useState(focusId ?? looks[0]?.id ?? "");
   const [code, setCode] = useState("");
   const [qr, setQr] = useState("");
@@ -54,6 +57,12 @@ export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onI
   }, [sel, looks]);
 
   const importCode = async (c: string) => {
+    const pc = profileCodeFrom(c);
+    if (pc) {
+      const told = await onImportProfile(pc);
+      setMsg(told ?? "That profile code is damaged. Ask for a fresh one.");
+      return !!told;
+    }
     const l = await decodeLook(c);
     if (!l) { setMsg("That is not a valid Pixi look."); return false; }
     onImport(l); setMsg(`Added “${l.name}” to My Looks.`); return true;
@@ -67,7 +76,7 @@ export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onI
       const f = getFrame();
       if (!f) return;
       const r = jsQR(f.data, f.width, f.height, { inversionAttempts: "dontInvert" });
-      if (r?.data.startsWith("PIXI")) { done.current = true; setScanning(false); await importCode(r.data); }
+      if (r?.data.includes("PIXI")) { done.current = true; setScanning(false); await importCode(r.data); }
     }, 250);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,7 +124,7 @@ export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onI
           )}
           {scanning && <p className="text-center text-[0.8125rem] text-white/45">Point the camera at the code. Watch the preview on the Camera tab.</p>}
           <div className="flex gap-2">
-            <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="PIXI1.…"
+            <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="A look or profile code"
               className="min-w-0 flex-1 rounded-xl bg-white/[0.07] px-3.5 py-3 text-[0.9375rem] outline-none placeholder:text-white/30 focus:ring-2 focus:ring-[var(--accent)]" />
             <button disabled={!paste.trim()} onClick={async () => { if (await importCode(paste)) setPaste(""); }}
               className="shrink-0 rounded-xl bg-white/[0.07] px-5 text-[0.9375rem] font-semibold disabled:opacity-40">Add</button>

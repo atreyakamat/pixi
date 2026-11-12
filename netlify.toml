@@ -1,6 +1,6 @@
-# The web version of Pixi: the same static export the Android app ships.
+# The web version of Pixi: landing page at /, the app at /app/, profiles at /u/.
 [build]
-  command = "PIXI_TARGET=app npx next build"
+  command = "PIXI_TARGET=web npx next build"
   publish = "out"
 
 [build.environment]

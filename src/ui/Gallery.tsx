@@ -66,9 +66,10 @@ function Tile({ it, selected, fav, onPick, onFav, onEdit, onHold }: { it: Galler
   );
 }
 
-export function Gallery({ items, selectedId, favs, recentIds, onPick, onFav, onEdit, onNew, onShare, onSettings }: {
+export function Gallery({ items, selectedId, favs, recentIds, onPick, onFav, onEdit, onNew, onShare, onSettings, onProfile, avatar }: {
   items: GalleryItem[]; selectedId: string; favs: string[]; recentIds: string[];
   onPick: (id: string) => void; onFav: (id: string) => void; onShare: () => void; onSettings: () => void;
+  onProfile: () => void; avatar: string | null;
   /** The look builder. Absent unless Advanced is on in Settings. */
   onEdit?: (id: string) => void; onNew?: () => void;
 }) {
@@ -93,6 +94,9 @@ export function Gallery({ items, selectedId, favs, recentIds, onPick, onFav, onE
       <header className="safe-t flex items-center justify-between px-4 pb-2 pt-3">
         <h1 className="text-[1.75rem] font-bold tracking-[-0.02em]">Studio</h1>
         <div className="flex gap-2">
+          <motion.button whileTap={press} transition={snappy} onClick={() => { tap(); onProfile(); }} aria-label="Your profile" className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-white/[0.09]">
+            {avatar ? <img src={avatar} alt="" className="h-full w-full object-cover" /> : <I n="user" className="h-[18px] w-[18px]" />}
+          </motion.button>
           <motion.button whileTap={press} transition={snappy} onClick={onSettings} aria-label="Settings" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.09]"><I n="gear" className="h-[18px] w-[18px]" /></motion.button>
           <motion.button whileTap={press} transition={snappy} onClick={onShare} aria-label="Share and receive looks" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.09]"><I n="share" className="h-[18px] w-[18px]" /></motion.button>
           {onNew && <motion.button whileTap={press} transition={snappy} onClick={() => { tap(); onNew(); }} aria-label="Create a new look" className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black"><I n="plus" className="h-[18px] w-[18px]" w={2.2} /></motion.button>}

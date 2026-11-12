@@ -12,6 +12,7 @@ Pixi is a retro camera that renders every look on your phone's GPU. There is no 
 - **Booth** — pick a frame, a 3-2-1 countdown, four shots land straight in it.
 - **Roll** — everything stays in Pixi until you export; a 30-day bin for mistakes; import from the phone; a zip backup you control.
 - **Share looks** — a look fits in a QR code. Scan one from another phone; nothing goes through a server.
+- **Profile** — a card with your name, best shots and the looks you shoot with, shared as an image, a link or a QR. No account: the profile rides inside the link.
 - **Nearby** — send photos phone to phone over a hotspot with WebRTC. No internet.
 
 ## How it feels
@@ -35,7 +36,7 @@ Pixi is a retro camera that renders every look on your phone's GPU. There is no 
 | Permissions | camera, microphone (video only, asked the first time you record), storage on Android 9 and older, vibrate (haptics) |
 | Accounts, analytics, crash reporting | none |
 
-See `docs/SECURITY-AUDIT.md` for the audit and the decisions behind it.
+See `docs/SECURITY-AUDIT.md` for the audit and `docs/ARCHITECTURE.md` for the decisions behind the app.
 
 ## Stack
 
@@ -45,21 +46,24 @@ Next.js 16 static export · React 19 · Tailwind 4 · framer-motion · WebGL2 re
 
 ```sh
 npm install
-npm run dev            # web, http://localhost:3000
+npm run dev            # landing page at http://localhost:3000, the app at /app/
 npm run apk            # static export → Capacitor sync → android/app/build/outputs/apk/debug/
 ```
 
 Tests run against the static export in headless Chrome:
 
 ```sh
-PIXI_TARGET=app npx next build
-python3 -m http.server 3111 -d out &
+PIXI_TARGET=web npx next build && cp -r out /tmp/out-web     # landing page at /, app at /app/
+PIXI_TARGET=app npx next build                               # camera at /
+python3 -m http.server 3111 -d out & python3 -m http.server 3112 -d /tmp/out-web &
 node scripts/e2e-mvp.mjs && node scripts/e2e-build.mjs && node scripts/e2e-v2.mjs && node scripts/e2e-carousel.mjs
 node scripts/e2e-polish.mjs          # onboarding, hidden controls, develop hand-off, smart Build
 node scripts/orientation-check.mjs   # every look comes out the right way up
 node scripts/backup-check.mjs        # backup round-trip, junk refused
 node scripts/layout-sheet.mjs        # every layout on one sheet → /tmp/layouts.jpg
 node scripts/clip-check.mjs          # the develop clip encodes
+node scripts/e2e-profile.mjs         # profile card, link round trip through /u/, hostile link refused
+node scripts/e2e-landing.mjs         # landing page: live demo renders and reacts, phone and desktop
 node scripts/bigtext-check.mjs        # every screen at the largest text size on a small phone
 node scripts/privacy-check.mjs        # privacy page reachable, scrolls, returns
 node scripts/launch-kit.mjs ~/photos # store screenshots + 15 s promo film → docs/launch/
