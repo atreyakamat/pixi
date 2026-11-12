@@ -434,10 +434,12 @@ export default function PixiApp() {
   }, []);
 
   const loadRoll = useCallback(() => {
-    rollAll().then((items) => setShots((cur) => [...cur, ...items.filter((i) => !cur.some((c) => c.id === i.id)).map((i) => ({ ...i, url: URL.createObjectURL(i.thumb ?? i.blob) }))]));
-    trashAll().then(setTrash);
+    // If the phone's storage cannot be opened the roll would just look empty; say so instead.
+    const failed = () => say("Pixi couldn't open your roll. Close the app and open it again.");
+    rollAll().then((items) => setShots((cur) => [...cur, ...items.filter((i) => !cur.some((c) => c.id === i.id)).map((i) => ({ ...i, url: URL.createObjectURL(i.thumb ?? i.blob) }))])).catch(failed);
+    trashAll().then(setTrash).catch(failed);
     void keepStorage();
-  }, []);
+  }, [say]);
   useEffect(() => { loadRoll(); }, [loadRoll]);
 
   // The card only goes once the photo is really in the roll, so it always has somewhere to land.
@@ -546,7 +548,7 @@ export default function PixiApp() {
     const frames: Blob[] = [];
     const grab = () => c.toBlob((b) => { if (b && frames.length < MAX_TL_FRAMES) { frames.push(b); setTlCount(frames.length); } }, "image/jpeg", 0.85);
     grab();
-    const timer = setInterval(() => { if (frames.length >= MAX_TL_FRAMES) { stopTimelapse(); } else grab(); }, tlInterval * 1000);
+    const timer = setInterval(() => { if (frames.length >= MAX_TL_FRAMES) { void stopTimelapse(); } else grab(); }, tlInterval * 1000);
     tlRef.current = { timer, frames, w: c.width, h: c.height };
     setTlCount(1); setElapsed(0); setRecording(true);
   };
@@ -811,7 +813,7 @@ export default function PixiApp() {
                   <div className="flex justify-center pb-2">
                     <div className="flex items-center gap-0.5 rounded-full bg-white/[0.07] p-1">
                       {cam.lenses.map((l) => (
-                        <button key={l.id} onClick={() => { tap(); cam.useLens(l.id); }} className={`t-caption1 rounded-full px-3 py-1.5 font-semibold transition-colors ${cam.lensId === l.id ? "bg-white/15 text-[var(--accent)]" : "text-white/75"}`}>{l.label}</button>
+                        <button key={l.id} onClick={() => { tap(); void cam.useLens(l.id); }} className={`t-caption1 rounded-full px-3 py-1.5 font-semibold transition-colors ${cam.lensId === l.id ? "bg-white/15 text-[var(--accent)]" : "text-white/75"}`}>{l.label}</button>
                       ))}
                       <span className="mx-0.5 h-3.5 w-px bg-white/15" />
                       {[1, 2, 3].map((z) => (
@@ -971,7 +973,7 @@ export default function PixiApp() {
             <Shutter video={isVideoMode} recording={recording} busy={!!busy} onPress={onShutter} />
             <div className="flex w-[52px] justify-end">
               <motion.button whileTap={{ scale: 0.88, rotate: 180 }} transition={snappy}
-                onClick={() => { tap(); if (cam.live) cam.flip(); else startCamera(cam.facing === "user" ? "environment" : "user"); }}
+                onClick={() => { tap(); if (cam.live) void cam.flip(); else void startCamera(cam.facing === "user" ? "environment" : "user"); }}
                 aria-label="Switch camera" className="flex h-[50px] w-[50px] items-center justify-center rounded-full bg-white/[0.09] text-white">
                 <I n="flip" className="h-[22px] w-[22px]" />
               </motion.button>
@@ -1133,7 +1135,7 @@ export default function PixiApp() {
             <div className="px-4">
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/[0.07] py-3 text-[0.9375rem] font-medium">
                 <I n="image" className="h-[18px] w-[18px]" /> Import a photo
-                <input type="file" accept="image/*" hidden onChange={(e) => { importFile(e.target.files?.[0]); setShelf(false); }} />
+                <input type="file" accept="image/*" hidden onChange={(e) => { void importFile(e.target.files?.[0]); setShelf(false); }} />
               </label>
             </div>
           </div>

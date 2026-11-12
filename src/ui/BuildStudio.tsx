@@ -129,7 +129,7 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
     for (const [k, b] of cache.current) if (!keep.has(k) && cache.current.size > 16) { b.close(); cache.current.delete(k); }
     const missing = need.filter((x) => !cache.current.has(x.k));
     if (!missing.length) return;
-    (async () => {
+    void (async () => {
       // Flipping pages loads quietly; only a real batch (a new look across a strip) says so.
       if (missing.length > 2) setBusy("Applying…");
       try {
@@ -138,7 +138,8 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
           if (!src || dead) continue;
           const lk = doc.looks[m.i];
           const preset = lk ? looks.find((l) => l.preset.id === lk)?.preset ?? null : null;
-          const bmp = await applyLook(src.blob, preset);
+          let bmp: ImageBitmap;
+          try { bmp = await applyLook(src.blob, preset); } catch { continue; } // an unreadable photo leaves its page empty; the others still load
           if (dead) { bmp.close(); return; }
           cache.current.set(m.k, bmp);
           setTick((t) => t + 1);

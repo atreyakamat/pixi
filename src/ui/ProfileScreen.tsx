@@ -64,7 +64,7 @@ export function ProfileScreen({ profile, setProfile, shots, looks, myLooks, isBu
   // Avatar image.
   useEffect(() => {
     let dead = false;
-    (async () => { const img = profile.avatar ? await loadImage(profile.avatar) : null; if (!dead) setAvatarImg(img); })();
+    void (async () => { const img = profile.avatar ? await loadImage(profile.avatar) : null; if (!dead) setAvatarImg(img); })();
     return () => { dead = true; };
   }, [profile.avatar]);
 
@@ -72,7 +72,7 @@ export function ProfileScreen({ profile, setProfile, shots, looks, myLooks, isBu
   const wanted = profile.photoIds.join(",");
   useEffect(() => {
     let dead = false;
-    (async () => {
+    void (async () => {
       for (const id of profile.photoIds) {
         if (bitmaps.current.has(id)) continue;
         const s = shots.find((x) => x.id === id);
@@ -88,7 +88,7 @@ export function ProfileScreen({ profile, setProfile, shots, looks, myLooks, isBu
   const lookKey = profile.lookIds.join(",");
   useEffect(() => {
     let dead = false;
-    (async () => {
+    void (async () => {
       if (!hasProfile(profile)) { if (!dead) { setCode(""); setQr(null); } return; }
       const c = await encodeProfile(profile, myLooks, isBuiltin);
       if (dead) return;

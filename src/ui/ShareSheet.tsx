@@ -41,7 +41,7 @@ export function ShareSheet({ looks, focusId, camLive, startCamera, getFrame, onI
   useEffect(() => {
     const l = looks.find((x) => x.id === sel);
     let dead = false;
-    (async () => {
+    void (async () => {
       // Clearing after a tick keeps the previous code on screen until the new one is ready, with no synchronous setState in the effect.
       await Promise.resolve();
       if (dead) return;

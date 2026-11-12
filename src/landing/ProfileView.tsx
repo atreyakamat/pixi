@@ -47,7 +47,7 @@ export function ProfileView() {
     let dead = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- placeholders first, pictures as they render
     setTiles(presets.map((x, i) => ({ key: `${x.preset.id}-${i}`, name: x.preset.name, note: x.mine ? "Their own look" : "Built into Pixi", src: null })));
-    (async () => {
+    void (async () => {
       const scene = beach(600, 800);
       const blob: Blob | null = await new Promise((r) => scene.toBlob((b) => r(b), "image/jpeg", 0.9));
       if (!blob) return;

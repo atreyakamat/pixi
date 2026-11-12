@@ -75,7 +75,8 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRe
   const [quota, setQuota] = useState<{ used: number; quota: number } | null>(null);
   const [busy, setBusy] = useState("");
   const restoreRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { keepStorage().then(setKept); storageEstimate().then(setQuota); }, []);
+  // These helpers never reject: each reports a failure as "not granted" or "unknown".
+  useEffect(() => { void keepStorage().then(setKept); void storageEstimate().then(setQuota); }, []);
 
   const backup = async () => {
     if (busy) return;
@@ -93,13 +94,13 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRe
     try {
       const r = await restoreRoll(f, (d, t) => setBusy(`Restoring ${d}/${t}…`));
       say(r.reason ?? `Restored ${r.added} ${r.added === 1 ? "shot" : "shots"}${r.skipped ? `, skipped ${r.skipped}` : ""}`);
-      if (r.added) { onRestored(); rollSize().then(setUse); }
+      if (r.added) { onRestored(); void rollSize().then(setUse); }
     } catch { say("Pixi couldn't read that backup. Pick the .zip Pixi made."); }
     setBusy("");
   };
   const [confirm, setConfirm] = useState(false);
   const set = <K extends keyof S>(k: K, v: S[K]) => setSettings({ ...settings, [k]: v });
-  useEffect(() => { rollSize().then(setUse); }, []);
+  useEffect(() => { void rollSize().then(setUse); }, []);
 
   return (
     <section className="pb-10">
