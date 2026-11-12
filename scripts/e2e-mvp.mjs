@@ -3,7 +3,7 @@ import puppeteer from "puppeteer-core";
 const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", headless: "new", args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"] });
 const p = await b.newPage(); await p.setViewport({ width: 420, height: 950 });
 const errs=[]; p.on("pageerror", e=>errs.push("PE "+e)); p.on("console", m=>{ if(m.type()==="error") errs.push(m.text()); });
-await p.evaluateOnNewDocument(()=>localStorage.setItem("pixi:onboarded","1"));
+await p.evaluateOnNewDocument(()=>{ localStorage.setItem("pixi:onboarded","1"); localStorage.setItem("pixi:settings:v1", JSON.stringify({ advanced: true })); });
 await p.goto("http://localhost:3111", { waitUntil: "domcontentloaded" });
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); await sleep(4000);
 const clickT=(t)=>p.evaluate((t)=>{const el=[...document.querySelectorAll("button")].find(b=>b.textContent.trim()===t||b.getAttribute("aria-label")===t); el?.click(); return !!el;},t);
@@ -33,7 +33,8 @@ await clickT("Guide"); await sleep(600); R.guide = await p.evaluate(()=>!!docume
 R.stored = await p.evaluate(()=>JSON.parse(localStorage.getItem("pixi:looks:v1")||"[]").map(l=>l.name));
 
 await clickT("Close"); await sleep(600); await clickT("Camera"); await sleep(1200);
-await p.evaluate(()=>document.querySelector('[aria-label="Looks, film and effects"]').click()); await sleep(900);
+await clickT("Show camera controls"); await sleep(600);
+await p.evaluate(()=>document.querySelector('[aria-label="Film: Edit"]').click()); await sleep(900);
 await clickT("Cameras"); await sleep(900);
 R.myRow = await p.evaluate(()=>{const d=document.querySelector('[role="dialog"]').innerText; return d.includes("My Looks") && d.includes("Goa Sunset");});
 await clickT("Film"); await sleep(900);

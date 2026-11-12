@@ -14,6 +14,17 @@ Pixi is a retro camera that renders every look on your phone's GPU. There is no 
 - **Share looks** — a look fits in a QR code. Scan one from another phone; nothing goes through a server.
 - **Nearby** — send photos phone to phone over a hotspot with WebRTC. No internet.
 
+## How it feels
+
+- **One path.** Shoot → the print develops in the corner → Build opens already filled with your newest shots → Save. Everything else is one tap away, never in the way.
+- **A camera that stays out of the way.** The viewfinder, the look, the shutter. Flash, timer, aspect, grid and lenses live behind the chevron (or pull down on the top bar).
+- **The develop is the signature.** A weighted spring, a chemistry-shaped fade, a shutter haptic and a quiet synthesised click; the print shrinks into the last-shot button when it is done.
+- **Photos move, they don't cut.** A roll tile grows into the viewer and shrinks back; swipe down to close.
+- **Feedback first.** The shutter puts a copy of the viewfinder on screen in the same frame; the full-quality render follows.
+- **One type scale, one accent.** Apple's eleven text styles in rem, following the phone's text-size setting (Dynamic Type), on an 8-pt grid.
+- **Calm messages.** Success is silent; problems say what happened and what to do, one at a time.
+- **Advanced is opt-in.** The layer-by-layer look builder is in Settings → Advanced.
+
 ## Privacy, concretely
 
 | | |
@@ -21,7 +32,7 @@ Pixi is a retro camera that renders every look on your phone's GPU. There is no 
 | Where photos are stored | IndexedDB in the app's own storage, marked persistent |
 | Network calls made by the app | none — the content-security policy forbids them |
 | Android backup to Google | off (`allowBackup=false`) |
-| Permissions | camera, microphone (video), storage on Android 9 and older |
+| Permissions | camera, microphone (video only, asked the first time you record), storage on Android 9 and older, vibrate (haptics) |
 | Accounts, analytics, crash reporting | none |
 
 See `docs/SECURITY-AUDIT.md` for the audit and the decisions behind it.
@@ -44,6 +55,12 @@ Tests run against the static export in headless Chrome:
 PIXI_TARGET=app npx next build
 python3 -m http.server 3111 -d out &
 node scripts/e2e-mvp.mjs && node scripts/e2e-build.mjs && node scripts/e2e-v2.mjs && node scripts/e2e-carousel.mjs
+node scripts/e2e-polish.mjs          # onboarding, hidden controls, develop hand-off, smart Build
+node scripts/orientation-check.mjs   # every look comes out the right way up
+node scripts/backup-check.mjs        # backup round-trip, junk refused
 node scripts/layout-sheet.mjs        # every layout on one sheet → /tmp/layouts.jpg
 node scripts/clip-check.mjs          # the develop clip encodes
+node scripts/launch-kit.mjs ~/photos # store screenshots + 15 s promo film → docs/launch/
 ```
+
+On a phone: Settings → Performance → Frame meter. See `docs/PERFORMANCE.md` and `docs/LAUNCH.md`.

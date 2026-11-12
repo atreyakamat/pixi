@@ -6,10 +6,10 @@ export interface Lens { id: string; label: string }
 
 const cameraError = (e: unknown): string => {
   const n = (e as { name?: string })?.name;
-  if (n === "NotAllowedError" || n === "SecurityError") return "Camera permission is blocked. Allow camera for this site in your browser settings, then tap Try again.";
-  if (n === "NotFoundError" || n === "OverconstrainedError") return "No camera was found on this device.";
-  if (n === "NotReadableError") return "The camera is being used by another app. Close it and try again.";
-  return "Could not start the camera. You can still import a photo.";
+  if (n === "NotAllowedError" || n === "SecurityError") return "Pixi can't use the camera yet. Allow Camera for Pixi in your phone's or browser's settings, then tap Try again.";
+  if (n === "NotFoundError" || n === "OverconstrainedError") return "This device doesn't seem to have a camera. You can still bring in a photo from your phone.";
+  if (n === "NotReadableError") return "Another app is using the camera. Close it, then tap Try again.";
+  return "The camera didn't start. Tap Try again, or bring in a photo from your phone.";
 };
 
 /** Owns the camera stream: start, flip, lens switch and torch. The hidden <video> is read by the render loop. */
@@ -45,7 +45,7 @@ export function useCamera() {
 
   const start = useCallback(async (want: "user" | "environment", deviceId?: string) => {
     if (typeof window === "undefined" || !window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      setError("The camera only works on a secure page. Open the https:// link (or localhost), not an http:// address or an embedded preview.");
+      setError("The camera only works on a secure page. Open Pixi from its https:// link, then try again.");
       return false;
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());

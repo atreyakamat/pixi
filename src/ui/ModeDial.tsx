@@ -40,7 +40,7 @@ export function ModeDial({ mode, onChange, disabled }: { mode: ModeId; onChange:
       <div ref={ref} onScroll={onScroll} className="flex overflow-x-auto px-[50%]" style={{ scrollbarWidth: "none", WebkitMaskImage: "linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)" }}>
         {MODES.map((m) => (
           <button key={m.id} data-m={m.id} disabled={disabled} onClick={() => { tap(); onChange(m.id); }}
-            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.13em] transition-colors duration-200 ${mode === m.id ? "text-[var(--accent)]" : "text-white/45"}`}>
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.13em] transition-colors duration-200 ${mode === m.id ? "text-[var(--accent)]" : "text-white/45"}`}>
             {m.label}
           </button>
         ))}

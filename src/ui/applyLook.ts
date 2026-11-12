@@ -3,6 +3,7 @@ import type { Preset } from "@/engine/types";
 
 let r: RetroRenderer | null = null;
 let canvas: HTMLCanvasElement | null = null;
+let stage: HTMLCanvasElement | null = null;
 let chain: Promise<unknown> = Promise.resolve();
 
 /**
@@ -15,7 +16,12 @@ export function applyLook(blob: Blob, preset: Preset | null, maxSide = 1000): Pr
     if (!preset) return src;
     try {
       if (!canvas) { canvas = document.createElement("canvas"); r = new RetroRenderer(canvas); r.warmUp(); }
-      r!.setSource(src, src.width, src.height);
+      // WebGL ignores UNPACK_FLIP_Y for ImageBitmaps, so a bitmap would come out upside down.
+      // A canvas copy uploads the same way as the camera's video frames.
+      if (!stage) stage = document.createElement("canvas");
+      stage.width = src.width; stage.height = src.height;
+      stage.getContext("2d")!.drawImage(src, 0, 0);
+      r!.setSource(stage, stage.width, stage.height);
       r!.render({ preset: { ...preset, overlays: preset.overlays ?? [] }, intensity: 1, mirror: false, lcd: "off", maxSide, aspect: src.width / src.height, date: new Date() }, 1);
       const out = await createImageBitmap(canvas);
       src.close();

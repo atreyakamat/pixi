@@ -7,8 +7,8 @@ const W = 112, GAP = 12;
 function Canister({ f, active }: { f: FilmStock | null; active: boolean }) {
   if (!f) {
     return (
-      <div className={`flex h-[168px] w-[112px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 text-[13px] text-white/45 transition ${active ? "scale-100 opacity-100" : "scale-90 opacity-60"}`}>
-        <div className="mb-2 text-2xl">∅</div>No film<div className="mt-1 text-[10px] text-white/35">camera colour</div>
+      <div className={`flex h-[168px] w-[112px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 text-[0.8125rem] text-white/45 transition ${active ? "scale-100 opacity-100" : "scale-90 opacity-60"}`}>
+        <div className="mb-2 text-2xl">∅</div>No film<div className="mt-1 text-[0.6875rem] text-white/35">camera colour</div>
       </div>
     );
   }
@@ -65,9 +65,9 @@ export function FilmCarousel({ value, onPick }: { value: string | null; onPick: 
         ))}
       </div>
       <div className="px-4 text-center">
-        <div className="text-[15px] font-semibold">{sel ? `${sel.maker} ${sel.name}` : "No film"}</div>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">{sel ? `${sel.kind} · ISO ${sel.iso}` : "Using the camera's own colour"}</div>
-        <p className="mx-auto mt-1 max-w-[80%] text-[13px] leading-relaxed text-white/45">{sel?.blurb ?? "Swipe to load a roll. Film replaces the camera's colour and grain, and keeps its lens character."}</p>
+        <div className="text-[0.9375rem] font-semibold">{sel ? `${sel.maker} ${sel.name}` : "No film"}</div>
+        <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">{sel ? `${sel.kind} · ISO ${sel.iso}` : "Using the camera's own colour"}</div>
+        <p className="mx-auto mt-1 max-w-[80%] text-[0.8125rem] leading-relaxed text-white/45">{sel?.blurb ?? "Swipe to load a roll. Film replaces the camera's colour and grain, and keeps its lens character."}</p>
       </div>
     </div>
   );

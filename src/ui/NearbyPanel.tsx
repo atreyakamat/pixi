@@ -19,8 +19,8 @@ interface Props {
 
 type Role = "none" | "send" | "recv";
 const shotName = (ext: string) => `pixi-${Date.now()}.${ext}`;
-const ghost = "rounded-xl bg-white/[0.07] px-4 py-2.5 text-[13px] font-medium text-white/80 disabled:opacity-40";
-const pri = "flex-1 rounded-xl bg-white py-3 text-[15px] font-semibold text-black disabled:opacity-40";
+const ghost = "rounded-xl bg-white/[0.07] px-4 py-2.5 text-[0.8125rem] font-medium text-white/80 disabled:opacity-40";
+const pri = "flex-1 rounded-xl bg-white py-3 text-[0.9375rem] font-semibold text-black disabled:opacity-40";
 
 export function NearbyPanel({ shots, camLive, startCamera, getFrame, onReceiveFile, onReceiveLook }: Props) {
   const nb = useRef<Nearby | null>(null);
@@ -98,16 +98,16 @@ export function NearbyPanel({ shots, camLive, startCamera, getFrame, onReceiveFi
           </AnimatePresence>
           {role === "send" && qr && (
             <>
-              <ol className="space-y-1 text-[13px] leading-relaxed text-white/45">
+              <ol className="space-y-1 text-[0.8125rem] leading-relaxed text-white/45">
                 <li>1. On the other phone, tap Receive and scan this code.</li>
                 <li>2. Then scan the code it shows back.</li>
               </ol>
               <motion.button whileTap={press} transition={snappy} className={pri} onClick={() => { if (!camLive) startCamera(); setScanning(!scanning); }}>{scanning ? "Stop scanning" : "Scan their code"}</motion.button>
             </>
           )}
-          {role === "recv" && !qr && <p className="text-[13px] text-white/45">{scanning ? "Point the camera at the sender's code." : "Starting the scanner…"}</p>}
+          {role === "recv" && !qr && <p className="text-[0.8125rem] text-white/45">{scanning ? "Point the camera at the sender's code." : "Starting the scanner…"}</p>}
           <div className="flex items-center justify-between">
-            <span className="text-[13px] capitalize text-white/35">{state}</span>
+            <span className="text-[0.8125rem] capitalize text-white/35">{state}</span>
             <button className={ghost} onClick={reset}>Cancel</button>
           </div>
         </>
@@ -115,24 +115,24 @@ export function NearbyPanel({ shots, camLive, startCamera, getFrame, onReceiveFi
 
       {open && (
         <>
-          <p className="flex items-center gap-2 text-[15px] font-medium text-[#30d158]"><span className="h-2 w-2 rounded-full bg-[#30d158]" />Connected</p>
-          {role === "send" && (shots.length === 0 ? <p className="text-[13px] text-white/45">Take a photo first, then tap it here to send.</p> : (
+          <p className="flex items-center gap-2 text-[0.9375rem] font-medium text-[#30d158]"><span className="h-2 w-2 rounded-full bg-[var(--accent)]" />Connected</p>
+          {role === "send" && (shots.length === 0 ? <p className="text-[0.8125rem] text-white/45">Take a photo first, then tap it here to send.</p> : (
             <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
               {shots.map((s) => (
                 <motion.button key={s.url} whileTap={press} transition={snappy} onClick={() => sendShot(s)} aria-label="Send this shot" className="h-20 w-16 shrink-0 overflow-hidden rounded-xl bg-white/[0.07]">
-                  {s.kind === "photo" ? <img src={s.url} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-[11px] font-semibold">Video</span>}
+                  {s.kind === "photo" ? <img src={s.url} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-[0.6875rem] font-semibold">Video</span>}
                 </motion.button>
               ))}
             </div>
           ))}
-          {role === "recv" && <p className="text-[13px] text-white/45">Waiting for photos…</p>}
+          {role === "recv" && <p className="text-[0.8125rem] text-white/45">Waiting for photos…</p>}
           {prog && <div className="h-1 overflow-hidden rounded-full bg-white/10"><motion.div className="h-full rounded-full bg-[var(--accent)]" animate={{ width: `${(prog[0] / prog[1]) * 100}%` }} transition={{ duration: 0.2 }} /></div>}
           <button className={ghost} onClick={reset}>Disconnect</button>
         </>
       )}
 
       <AnimatePresence>
-        {msg && <motion.p key={msg} role="status" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={snappy} className="text-[13px] text-[var(--accent)]">{msg}</motion.p>}
+        {msg && <motion.p key={msg} role="status" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={snappy} className="text-[0.8125rem] text-[var(--accent)]">{msg}</motion.p>}
       </AnimatePresence>
     </Card>
   );

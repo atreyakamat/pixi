@@ -30,7 +30,11 @@ import { acceptMedia } from "@/ui/media";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
 import { ext as extOf, mime as mimeOf, useSettings } from "@/ui/settings";
 import { noteUse, topUsed } from "@/ui/recent";
-import { fade, press, smooth, snappy, tap } from "@/ui/motion";
+import { fade, morph, press, smooth, snappy, tap } from "@/ui/motion";
+import { shutterFeel } from "@/ui/feel";
+import { frame as perfFrame, shutterTimings } from "@/ui/perf";
+import { FrameMeter } from "@/ui/FrameMeter";
+import { applySystemTextSize } from "@/ui/textSize";
 import { FILMS } from "@/presets/films";
 import { useDraft } from "@/ui/useDraft";
 import { loadFavs, loadLooks, lookToPreset, newId, persistFavs, persistLooks, presetToLook, type SavedLook } from "@/ui/store";
@@ -71,6 +75,25 @@ const pickMime = (): { mime: string; ext: string } => {
   for (const [m, e] of list) if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) return { mime: m, ext: e };
   return { mime: "", ext: "webm" };
 };
+
+const nowMs = () => Date.now();
+const newShotId = () => `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+
+/**
+ * A small JPEG of what the viewfinder shows right now. Synchronous and a few milliseconds, so the
+ * photo can be on screen in the same frame the shutter is pressed. The WebGL canvas keeps its
+ * drawing buffer, so this reads the last rendered frame.
+ */
+function quickFrame(src: HTMLCanvasElement | null): string | null {
+  if (!src || !src.width) return null;
+  try {
+    const k = 320 / Math.max(src.width, src.height);
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(src.width * k)); c.height = Math.max(1, Math.round(src.height * k));
+    c.getContext("2d")!.drawImage(src, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.8);
+  } catch { return null; }
+}
 
 function GridOverlay({ id }: { id: string }) {
   if (id === "off") return null;
@@ -114,9 +137,23 @@ export default function Home() {
   const [favs, setFavs] = useState<string[]>([]);
   const [filmId, setFilmId] = useState<string | null>(null);
   const [compare, setCompare] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; act?: { label: string; run: () => void } } | null>(null);
-  /** One way to talk to the person. An action turns the toast into an offer rather than a dead end. */
-  const say = useCallback((msg: string, act?: { label: string; run: () => void }) => setToast(msg ? { msg, act } : null), []);
+  type Toast = { msg: string; act?: { label: string; run: () => void }; k: number };
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toast = toasts[0] ?? null;
+  const setToast = useCallback(() => setToasts((q) => q.slice(1)), []);
+  /**
+   * One way to talk to the person, one message at a time. A newer message replaces a waiting one of
+   * the same kind; a message with an action (a way out of a failure) always waits its turn.
+   * Passing an empty string clears everything.
+   */
+  const say = useCallback((msg: string, act?: { label: string; run: () => void }) => {
+    if (!msg) { setToasts([]); return; }
+    setToasts((q) => {
+      if (q.some((t) => t.msg === msg)) return q;
+      const keep = q.filter((t, i) => i === 0 || t.act);
+      return [...keep, { msg, act, k: Date.now() + Math.random() }].slice(-3);
+    });
+  }, []);
   const [dev, setDev] = useState<{ id: string; url: string } | null>(null);
   const [trash, setTrash] = useState<BinnedShot[]>([]);
   const dr = useDraft();
@@ -127,6 +164,11 @@ export default function Home() {
   const [shelf, setShelf] = useState(false);
   const [shelfTab, setShelfTab] = useState<"cams" | "film" | "style">("cams");
   const [proSheet, setProSheet] = useState(false);
+  /** Flash, timer, aspect, grid, lenses: hidden until asked for. */
+  const [controls, setControls] = useState(false);
+  /** The viewfinder is showing a photo from the phone rather than the camera. */
+  const [still, setStill] = useState(false);
+  const pullRef = useRef<number | null>(null);
   const [frameId, setFrameId] = useState<"auto" | "none" | "polaroid" | "thin" | "rounded" | "film">("auto");
   const [boothLayout, setBoothLayout] = useState("st-classic");
   const [boothStep, setBoothStep] = useState(0);
@@ -211,7 +253,7 @@ export default function Home() {
   }, [camId, aspectId, gridId, timerSec, wmId, wmText, stamp, filmId, frameId, boothLayout]);
   useEffect(() => { if (looksReady) persistLooks(myLooks); }, [myLooks, looksReady]);
   useEffect(() => { if (looksReady) persistFavs(favs); }, [favs, looksReady]);
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), toast.act ? 6000 : 2600); return () => clearTimeout(t); }, [toast]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(), toast.act ? 6000 : 2200); return () => clearTimeout(t); }, [toast, setToast]);
 
   // Fit the viewfinder box to the chosen aspect inside the available slot.
   useEffect(() => {
@@ -252,6 +294,7 @@ export default function Home() {
       const a = performance.now();
       r.render({ ...optsRef.current, maxSide: side }, (t - t0) / 1000);
       const cost = performance.now() - a;
+      perfFrame(cost);
       if (cost > 13) { fast = 0; if (++slow > 8 && side > 420) { side = Math.round(side * 0.82); slow = 0; } }
       else if (cost < 6) { slow = 0; if (++fast > 90 && side < MAX) { side = Math.min(MAX, Math.round(side * 1.12)); fast = 0; } }
       raf = requestAnimationFrame(loop);
@@ -328,27 +371,34 @@ export default function Home() {
     setBoot("ready"); void cam.start("environment");
   };
 
-  interface AddOpts { develop?: boolean; autoSave?: boolean; quiet?: boolean }
+  interface AddOpts { develop?: boolean; autoSave?: boolean; quiet?: boolean; id?: string }
 
   const addShot = async (blob: Blob, kind: Shot["kind"], ext: string, o: AddOpts = {}): Promise<Shot> => {
-    const created = Date.now();
+    const created = nowMs();
     const thumb = kind === "photo" ? await makeThumb(blob) : undefined;
-    const item: Shot = { id: `s${created}${Math.random().toString(36).slice(2, 6)}`, url: URL.createObjectURL(thumb ?? blob), kind, ext, blob, created };
+    const item: Shot = { id: o.id ?? newShotId(), url: URL.createObjectURL(thumb ?? blob), kind, ext, blob, created };
     setShots((s) => [item, ...s]);
-    if (kind === "photo") {
+    if (kind === "photo" && o.develop !== false) {
       setSnap((n) => n + 1);
-      if (o.develop !== false && settings.develop) setDev({ id: item.id, url: item.url });
+      if (settings.develop) { setDevDone(null); setDev({ id: item.id, url: item.url }); }
     }
     const autoSave = o.autoSave ?? settings.saveMode === "auto";
     const r = await rollAdd({ id: item.id, kind, ext, blob, thumb, created, camera: camDef.model }, { autoSave, limit: settings.rollLimit });
     if (o.quiet) return item;
     if (r.save) {
-      if (r.save.ok) { say(saveMessage(r.save)); setShots((s) => s.map((x) => (x.id === item.id ? { ...x, exported: true } : x))); }
+      // Success is silent: the photo appearing is the confirmation. Only problems speak up.
+      if (r.save.ok) { if (r.save.where === "files") noteFilesOnce(); setShots((s) => s.map((x) => (x.id === item.id ? { ...x, exported: true } : x))); }
       // Some phones will not let any app write to the gallery. The share sheet always can, so the
       // photo is never stranded: it is already safe in Pixi, and this is the way out to anywhere else.
       else say(r.save.reason, { label: "Share", run: () => void shareOrSave(blob, `pixi-${created}.${ext}`) });
-    } else say(r.stored ? "Kept in Pixi" : "Could not keep that shot. Storage may be full.");
+    } else if (!r.stored) say("Pixi couldn't keep that shot because the phone is out of space. Free some space, then try again.");
     return item;
+  };
+
+  /** Some phones put saved photos in Documents/Pixi rather than the gallery. Say so once, not on every shot. */
+  const noteFilesOnce = () => {
+    try { if (localStorage.getItem("pixi:noted-files")) return; localStorage.setItem("pixi:noted-files", "1"); } catch { /* private */ }
+    say("This phone keeps Pixi photos in Documents/Pixi");
   };
 
   /** Deleting puts a shot in the bin for thirty days, so one mis-tap is not final. */
@@ -380,10 +430,18 @@ export default function Home() {
       try { await addShot(m.blob, m.kind, m.ext, { develop: false, autoSave: false, quiet: true }); ok++; }
       catch { /* skip anything the phone will not decode */ }
     }
-    say(ok ? `${ok} added to your roll` : "Those files could not be opened");
+    say(ok ? `${ok} added to your roll` : "Those files aren't photos Pixi can open. Try JPEG or PNG.");
   };
 
   // Load saved shots on launch so nothing is lost when the app is closed. Also used after a restore.
+  useEffect(() => {
+    void applySystemTextSize();
+    // Coming back from the phone's settings may have changed the text size.
+    const on = () => { if (!document.hidden) void applySystemTextSize(); };
+    document.addEventListener("visibilitychange", on);
+    return () => document.removeEventListener("visibilitychange", on);
+  }, []);
+
   const loadRoll = useCallback(() => {
     rollAll().then((items) => setShots((cur) => [...cur, ...items.filter((i) => !cur.some((c) => c.id === i.id)).map((i) => ({ ...i, url: URL.createObjectURL(i.thumb ?? i.blob) }))]));
     trashAll().then(setTrash);
@@ -391,15 +449,33 @@ export default function Home() {
   }, []);
   useEffect(() => { loadRoll(); }, [loadRoll]);
 
-  const startCamera = async (facing: "user" | "environment") => { const ok = await cam.start(facing); if (ok) setError(""); };
+  // The card only goes once the photo is really in the roll, so it always has somewhere to land.
+  // On a slow phone the full render can outlast the develop; the card simply waits for it.
+  const [devDone, setDevDone] = useState<string | null>(null);
+  const endDevelop = useCallback(() => setDevDone((d) => d ?? "now"), []);
+  useEffect(() => {
+    if (!dev || !devDone) return;
+    if (!shots.some((x) => x.id === dev.id)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- both conditions are met only after an async save
+    setDev(null); setDevDone(null);
+  }, [dev, devDone, shots]);
+
+  const startCamera = async (facing: "user" | "environment") => { const ok = await cam.start(facing); if (ok) { setError(""); setStill(false); } };
 
   const importFile = async (f: File | undefined) => {
     if (!f) return;
     try {
       const bmp = await createImageBitmap(f, { imageOrientation: "from-image" });
-      cam.stop(); setError("");
-      srcRef.current = { el: bmp, w: bmp.width, h: bmp.height };
-    } catch { setError("That file could not be opened as an image."); }
+      // WebGL ignores its flip-Y setting for ImageBitmaps, so the photo would arrive upside down.
+      // A canvas copy is uploaded the same way as the camera's video frames.
+      const k = Math.min(1, 2048 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+      bmp.close();
+      cam.stop(); setError(""); setStill(true);
+      srcRef.current = { el: c, w: c.width, h: c.height };
+    } catch { setError("That file isn't a photo Pixi can open. Try a JPEG or PNG."); }
   };
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -432,9 +508,21 @@ export default function Home() {
     if (torchShot) { await cam.setTorch(true); await sleep(380); }
     let night = null as Awaited<ReturnType<typeof nightSource>>;
     if (mode === "night") { night = await nightSource(); if (night) overrideRef.current = night; }
+    // Feedback first, work second: the viewfinder already shows the look, so a small copy of it
+    // goes on screen at once and the full-quality render follows behind it.
+    const t0 = performance.now();
+    const id = newShotId();
+    shutterFeel();
+    setSnap((n) => n + 1);
+    const quick = quickFrame(canvasRef.current);
+    if (quick && settings.develop) { setDevDone(null); setDev({ id, url: quick }); }
+    // Let the card paint before the full render takes the main thread; it is what the person sees.
+    // rAF runs just before the paint; the timeout after it runs just after.
+    await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(() => { shutterTimings(performance.now() - t0); r(); }, 0)));
     try {
       const blob = await rendererRef.current!.capture({ ...optsRef.current, maxSide: optsRef.current.preset.captureSide ?? 2048, date: new Date() }, performance.now() / 1000);
-      addShot(blob, "photo", "jpg");
+      const p = addShot(blob, "photo", "jpg", { id, develop: !quick });
+      void p.then(() => shutterTimings(performance.now() - t0, performance.now() - t0));
     } finally {
       overrideRef.current = null; setBusy(""); setFlash(false);
       if (torchShot) await cam.setTorch(false);
@@ -480,7 +568,7 @@ export default function Home() {
     pauseRef.current = true;
     try {
       const res = await encodeTimelapse(t.frames, t.w, t.h, 24);
-      if (res) addShot(res.blob, "video", res.ext); else setError("Need at least 2 frames for a timelapse.");
+      if (res) addShot(res.blob, "video", res.ext); else setError("A timelapse needs at least two frames. Let it run a little longer next time.");
     } finally { pauseRef.current = false; setBusy(""); }
   };
 
@@ -525,14 +613,14 @@ export default function Home() {
     if (recording) { return mode === "timelapse" ? stopTimelapse() : stopVideo(); }
     if (mode === "booth") return runBooth();
     if (timerSec > 0 && !(await runCountdown(timerSec))) return;
-    if (mode === "video") return startVideo();
+    if (mode === "video") { tap(12); return startVideo(); }
     if (mode === "timelapse") return startTimelapse();
     return takePhoto();
   };
 
   const receiveFile = async (blob: Blob) => {
     const m = await acceptMedia(blob);
-    if (!m) { say("That file was not a photo or video, so it was not kept."); return; }
+    if (!m) { say("That file wasn't a photo or video, so Pixi didn't keep it."); return; }
     void addShot(m.blob, m.kind, m.ext);
   };
 
@@ -544,14 +632,13 @@ export default function Home() {
     try {
       const r = await makeDevelopClip(s.blob, (p) => setBusy(`Developing your clip… ${Math.round(p * 100)}%`));
       setBusy("");
-      if (!r) { say("This phone cannot record video from the app."); return; }
+      if (!r) { say("This phone can't record a clip from inside Pixi. Share the photo instead."); return; }
       const res = await shareOrSave(r.blob, `pixi-develop-${s.created}.${r.ext}`);
       if (!res.ok) say(res.reason);
-    } catch { setBusy(""); say("Could not make the clip."); }
+    } catch { setBusy(""); say("The clip didn't finish. Try again with the camera closed."); }
   };
 
   const saveShot = async (s: Shot) => {
-    say("Saving…");
     const r = await saveToGallery(s.blob, `pixi-${s.created}.${s.ext}`, s.kind);
     if (r.ok) { say(saveMessage(r)); await markExported(s.id); setShots((x) => x.map((y) => (y.id === s.id ? { ...y, exported: true } : y))); }
     else say(r.reason, { label: "Share", run: () => void share(s) });
@@ -646,8 +733,8 @@ export default function Home() {
     .map((row) => ({ row, items: allCams.filter((c) => c.row === row && (brand === "All" || c.brand === brand)) }))
     .filter((r) => r.items.length);
   const carouselItems = useMemo(() => (["Mine", "Digicam", "Special"] as const).flatMap((r) => allCams.filter((c) => c.row === r)), [allCams]);
-  const chip = (on: boolean) => `shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors ${on ? "bg-white text-black" : "bg-white/[0.08] text-white/80"}`;
-  const seg = (on: boolean) => `shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${on ? "bg-white text-black" : "bg-white/[0.08] text-white/70"}`;
+  const chip = (on: boolean) => `shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[0.8125rem] font-medium transition-colors ${on ? "bg-white text-black" : "bg-white/[0.08] text-white/80"}`;
+  const seg = (on: boolean) => `shrink-0 rounded-full px-2.5 py-1 text-[0.6875rem] font-semibold transition-colors ${on ? "bg-white text-black" : "bg-white/[0.08] text-white/70"}`;
   const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
   const isVideoMode = mode === "video" || mode === "timelapse";
   const last = shots[0];
@@ -659,28 +746,68 @@ export default function Home() {
       <AnimatePresence>{boot === "onboard" && <Onboarding key="ob" onFinish={finishOnboard} />}</AnimatePresence>
 
       {view === "camera" && (
-        <header className="safe-t flex shrink-0 items-center justify-around px-2 pt-1">
-          {([
-            ["Flash", "bolt", flashOn, () => setFlashOn(!flashOn), flashOn ? "On" : ""],
-            ["Timer", "timer", timerSec > 0, () => cycle(TIMERS, timerSec, setTimerSec), timerSec > 0 ? `${timerSec}s` : ""],
-            ["Aspect ratio", "ratio", aspectId !== "look", () => !recording && cycle(ASPECTS.map((a) => a.id), aspectId, setAspectId), aspectId === "look" ? "" : aspectLabel],
-            ["Grid", "grid", gridId !== "off", () => cycle(GRIDS.map((g) => g.id), gridId, setGridId), ""],
-            ["Looks, film and effects", "sliders", shelf, () => { setShelfTab("style"); setShelf(true); }, ""],
-          ] as [string, IconName, boolean, () => void, string][]).map(([label, icon, on, act, note]) => (
-            <motion.button key={label} aria-label={label} aria-pressed={on} whileTap={press} transition={snappy}
-              onClick={() => { tap(); act(); }}
-              className={`flex h-11 w-11 flex-col items-center justify-center gap-0.5 ${on ? "text-[var(--accent)]" : "text-white/75"}`}>
-              <I n={icon} className="h-[21px] w-[21px]" w={1.7} />
-              <span className="h-[9px] text-[9px] font-semibold leading-none tracking-wide">{note}</span>
+        // The camera keeps out of the way: what is switched on shows as a quiet badge, and every
+        // control lives one tap (or one pull down on this bar) away.
+        <header className="safe-t relative z-20 shrink-0"
+          onPointerDown={(e) => { pullRef.current = e.clientY; }}
+          onPointerUp={(e) => { if (pullRef.current !== null && e.clientY - pullRef.current > 24) { tap(); setControls(true); } pullRef.current = null; }}>
+          <div className="flex h-11 items-center justify-between px-4">
+            <div className="flex min-w-[88px] items-center gap-1.5">
+              {flashOn && <span className="flex h-6 items-center rounded-full bg-[var(--accent)] px-2 text-black"><I n="bolt" className="h-3.5 w-3.5" w={2} /></span>}
+              {timerSec > 0 && <span className="t-caption2 flex h-6 items-center gap-1 rounded-full bg-white/10 px-2 font-semibold tabular-nums"><I n="timer" className="h-3.5 w-3.5" w={2} />{timerSec}s</span>}
+              {gridId !== "off" && <span className="flex h-6 items-center rounded-full bg-white/10 px-2"><I n="grid" className="h-3.5 w-3.5" w={2} /></span>}
+            </div>
+            <motion.button whileTap={press} transition={snappy} aria-label={controls ? "Hide camera controls" : "Show camera controls"} aria-expanded={controls}
+              onClick={() => { tap(); setControls((c) => !c); }}
+              className="flex h-11 w-11 items-center justify-center text-white/70">
+              <motion.span animate={{ rotate: controls ? 180 : 0 }} transition={snappy}><I n="chevD" className="h-5 w-5" w={2} /></motion.span>
             </motion.button>
-          ))}
+            <div className="flex min-w-[88px] justify-end">
+              {settings.meter ? <span className="t-caption2 text-white/40">meter on</span> : null}
+            </div>
+          </div>
+          <AnimatePresence initial={false}>
+            {controls && (
+              <motion.div key="controls" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={smooth} className="overflow-hidden">
+                <div className="flex items-start justify-around px-2 pb-2">
+                  {([
+                    ["Flash", "bolt", flashOn, () => setFlashOn(!flashOn), flashOn ? "On" : "Off"],
+                    ["Timer", "timer", timerSec > 0, () => cycle(TIMERS, timerSec, setTimerSec), timerSec > 0 ? `${timerSec}s` : "Off"],
+                    ["Aspect", "ratio", aspectId !== "look", () => !recording && cycle(ASPECTS.map((a) => a.id), aspectId, setAspectId), aspectId === "look" ? "Look" : aspectLabel],
+                    ["Grid", "grid", gridId !== "off", () => cycle(GRIDS.map((g) => g.id), gridId, setGridId), gridId === "off" ? "Off" : "On"],
+                    ["Film", "sliders", false, () => { setShelfTab("style"); setShelf(true); }, "Edit"],
+                  ] as [string, IconName, boolean, () => void, string][]).map(([label, icon, on, act, note]) => (
+                    <motion.button key={label} aria-label={`${label}: ${note}`} aria-pressed={on} whileTap={press} transition={snappy}
+                      onClick={() => { tap(); act(); }}
+                      className="flex w-14 flex-col items-center gap-1">
+                      <span className={`flex h-11 w-11 items-center justify-center rounded-full ${on ? "bg-[var(--accent)] text-black" : "bg-white/[0.09] text-white"}`}><I n={icon} className="h-5 w-5" w={1.8} /></span>
+                      <span className="t-caption2 text-white/55">{note}</span>
+                    </motion.button>
+                  ))}
+                </div>
+                {cam.live && (
+                  <div className="flex justify-center pb-2">
+                    <div className="flex items-center gap-0.5 rounded-full bg-white/[0.07] p-1">
+                      {cam.lenses.map((l) => (
+                        <button key={l.id} onClick={() => { tap(); cam.useLens(l.id); }} className={`t-caption1 rounded-full px-3 py-1.5 font-semibold transition-colors ${cam.lensId === l.id ? "bg-white/15 text-[var(--accent)]" : "text-white/75"}`}>{l.label}</button>
+                      ))}
+                      <span className="mx-0.5 h-3.5 w-px bg-white/15" />
+                      {[1, 2, 3].map((z) => (
+                        <button key={z} onClick={() => { tap(); setZoom(z); }} className={`t-caption1 rounded-full px-3 py-1.5 font-semibold tabular-nums transition-colors ${Math.abs(zoom - z) < 0.15 ? "bg-white/15 text-[var(--accent)]" : "text-white/75"}`}>{z}×</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </header>
       )}
 
       {view === "builder" && (
         <header className="safe-t flex shrink-0 items-center justify-between px-4 pb-1 pt-3">
-          <button onClick={() => { dr.open(null); setView("looks"); }} className="text-[15px] font-medium text-white/70">Close</button>
-          <h1 className="text-[17px] font-semibold tracking-[-0.01em]">Build</h1>
+          <button onClick={() => { dr.open(null); setView("looks"); }} className="text-[0.9375rem] font-medium text-white/70">Close</button>
+          <h1 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">Build</h1>
           <span className="w-[44px]" />
         </header>
       )}
@@ -708,13 +835,13 @@ export default function Home() {
               <AnimatePresence mode="wait" initial={false}>
                 {recording ? (
                   <motion.span key="rec" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={fade}
-                    className="lcd flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold backdrop-blur-md">
+                    className="lcd flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[0.6875rem] font-semibold backdrop-blur-md">
                     <motion.span animate={{ opacity: [1, 0.25, 1] }} transition={{ duration: 1.4, repeat: Infinity }} className="h-[7px] w-[7px] rounded-full bg-[#ff3b30]" />
                     {mode === "timelapse" ? `${tlCount} FRAMES` : mmss}
                   </motion.span>
                 ) : boothStep || aspectId !== "look" ? (
                   <motion.span key={`idle${boothStep}`} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={fade}
-                    className="lcd rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-semibold text-white/85 backdrop-blur-md">
+                    className="lcd rounded-full bg-black/40 px-2.5 py-1 text-[0.6875rem] font-semibold text-white/85 backdrop-blur-md">
                     {boothStep ? `${boothStep} OF 4` : aspectLabel}
                   </motion.span>
                 ) : null}
@@ -725,46 +852,41 @@ export default function Home() {
               {busy && (
                 <motion.div key="busy" role="status" aria-live="polite" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade}
                   className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-[2px]">
-                  <span className="rounded-full bg-black/70 px-4 py-2 text-[13px] font-medium">{busy}</span>
+                  <span className="rounded-full bg-black/70 px-4 py-2 text-[0.8125rem] font-medium">{busy}</span>
                 </motion.div>
               )}
             </AnimatePresence>
 
             {mode === "portrait" && !recording && !busy && (
-              <span className="pointer-events-none absolute inset-x-0 bottom-14 text-center text-[11px] text-white/55">Tap to set focus</span>
+              <span className="pointer-events-none absolute inset-x-0 bottom-14 text-center text-[0.6875rem] text-white/55">Tap to set focus</span>
             )}
 
-            {!cam.live && !(error || cam.error) && boot === "ready" && (
+            {still && !cam.live && (
+              <button onClick={() => { tap(); void startCamera(cam.facing); }} onPointerDown={(e) => e.stopPropagation()}
+                data-pixi="still-pill" className="t-footnote absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/55 px-3.5 py-1.5 font-medium backdrop-blur-md">
+                Photo from your phone · <span className="text-[var(--accent)]">Back to camera</span>
+              </button>
+            )}
+
+            {!cam.live && !still && !(error || cam.error) && boot === "ready" && (
               <motion.button whileTap={press} transition={snappy} onClick={() => startCamera(cam.facing)}
                 className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40">
                 <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black"><I n="camera" className="h-7 w-7" /></span>
-                <span className="text-[13px] font-medium">Tap to start the camera</span>
+                <span className="text-[0.8125rem] font-medium">Tap to start the camera</span>
               </motion.button>
             )}
 
             {(error || cam.error) && (
               <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-black/80 p-3.5 text-center backdrop-blur-xl" onPointerDown={(e) => e.stopPropagation()}>
-                <p className="text-[13px] leading-snug text-white/85">{error || cam.error}</p>
+                <p className="text-[0.8125rem] leading-snug text-white/85">{error || cam.error}</p>
                 <div className="mt-3 flex justify-center gap-2">
-                  <button onClick={() => { setError(""); cam.setError(""); startCamera(cam.facing); }} className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-black">Try again</button>
-                  <label className="cursor-pointer rounded-full bg-white/12 px-4 py-1.5 text-[13px] font-medium">Import a photo<input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
+                  <button onClick={() => { setError(""); cam.setError(""); startCamera(cam.facing); }} className="rounded-full bg-white px-4 py-1.5 text-[0.8125rem] font-semibold text-black">Try again</button>
+                  <label className="cursor-pointer rounded-full bg-white/12 px-4 py-1.5 text-[0.8125rem] font-medium">Import a photo<input type="file" accept="image/*" hidden onChange={(e) => importFile(e.target.files?.[0])} /></label>
                 </div>
               </div>
             )}
 
-            {view === "camera" && cam.live && (
-              <div className="absolute inset-x-0 bottom-3 flex justify-center" onPointerDown={(e) => e.stopPropagation()}>
-                <div className="flex items-center gap-0.5 rounded-full bg-black/40 p-1 backdrop-blur-md">
-                  {cam.lenses.map((l) => (
-                    <button key={l.id} onClick={() => { tap(); cam.useLens(l.id); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${cam.lensId === l.id ? "bg-white/15 text-[var(--accent)]" : "text-white/75"}`}>{l.label}</button>
-                  ))}
-                  <span className="mx-0.5 h-3.5 w-px bg-white/15" />
-                  {[1, 2, 3].map((z) => (
-                    <button key={z} onClick={() => { tap(); setZoom(z); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold tabular-nums transition-colors ${Math.abs(zoom - z) < 0.15 ? "bg-white/15 text-[var(--accent)]" : "text-white/75"}`}>{z}×</button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {settings.meter && view === "camera" && <FrameMeter />}
           </div>
         </div>
       </div>
@@ -775,30 +897,30 @@ export default function Home() {
 
           <button onClick={() => { setShelfTab("cams"); setShelf(true); }} className="mt-2 flex w-full flex-col items-center px-10">
             <AnimatePresence mode="wait" initial={false}>
-              <motion.span key={camDef.preset.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={fade} className="max-w-full truncate text-[15px] font-semibold tracking-[-0.01em]">
+              <motion.span key={camDef.preset.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={fade} className="max-w-full truncate text-[0.9375rem] font-semibold tracking-[-0.01em]">
                 {camDef.preset.name}
               </motion.span>
             </AnimatePresence>
-            <span className="mt-0.5 max-w-full truncate text-[11px] text-white/40">
+            <span className="mt-0.5 max-w-full truncate text-[0.6875rem] text-white/40">
               {camDef.brand} {camDef.model}{film ? ` · ${film.name}` : ""}
             </span>
           </button>
 
           <div className="flex h-7 items-center justify-center px-6">
             {mode === "portrait" && (
-              <label className="flex w-full max-w-[260px] items-center gap-3 text-[11px] text-white/50">
+              <label className="flex w-full max-w-[260px] items-center gap-3 text-[0.6875rem] text-white/50">
                 <span>Blur</span>
                 <input aria-label="Portrait blur" type="range" min={0} max={1} step={0.02} value={portraitBlur} onChange={(e) => setPortraitBlur(+e.target.value)} className="flex-1 accent-[var(--accent)]" />
               </label>
             )}
-            {mode === "night" && <p className="text-[11px] text-white/45">Blends 8 frames. Hold still.</p>}
+            {mode === "night" && <p className="text-[0.6875rem] text-white/45">Blends 8 frames. Hold still.</p>}
             {mode === "timelapse" && (
-              <div className="flex items-center gap-1.5 text-[11px] text-white/45">Every
+              <div className="flex items-center gap-1.5 text-[0.6875rem] text-white/45">Every
                 {TL_INTERVALS.map((n) => <button key={n} disabled={recording} onClick={() => setTlInterval(n)} className={seg(tlInterval === n)}>{n}s</button>)}
               </div>
             )}
             {mode === "booth" && (
-              <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] text-white/45" style={{ scrollbarWidth: "none" }}>
+              <div className="flex items-center gap-1.5 overflow-x-auto text-[0.6875rem] text-white/45" style={{ scrollbarWidth: "none" }}>
                 <span className="shrink-0">4 shots</span>
                 {BOOTH_FRAMES.map(([k, l]) => <button key={k} onClick={() => setBoothLayout(k)} className={`${seg(boothLayout === k)} shrink-0`}>{l}</button>)}
               </div>
@@ -811,9 +933,12 @@ export default function Home() {
           <div className="flex items-center justify-between px-9 pb-1.5 pt-1.5">
             <div className="flex w-[52px] justify-start">
               <AnimatePresence mode="popLayout" initial={false}>
-                {last ? (
-                  <motion.button key={last.id} initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} transition={snappy}
-                    onClick={() => setView("roll")} aria-label="Open your roll" className="h-[50px] w-[50px] overflow-hidden rounded-[13px] hair">
+                {last && dev?.id === last.id ? (
+                  // The photo is still developing on its card; it lands here when it is done.
+                  <motion.span key="waiting" className="h-[50px] w-[50px] rounded-[13px] bg-white/[0.06] hair" />
+                ) : last ? (
+                  <motion.button key={last.id} layoutId={`shot-${last.id}`} initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} transition={morph}
+                    onClick={() => { tap(); setView("roll"); }} aria-label="Open your roll" className="h-[50px] w-[50px] overflow-hidden rounded-[13px] hair">
                     {last.kind === "photo" ? <img src={last.url} alt="" className="h-full w-full object-cover" /> : <video src={last.url} muted className="h-full w-full object-cover" />}
                   </motion.button>
                 ) : (
@@ -842,7 +967,7 @@ export default function Home() {
                 <Gallery items={galleryItems} selectedId={camId} favs={favs} recentIds={recentIds}
                   onPick={(id) => { setCamId(id); setView("camera"); }}
                   onFav={(id) => setFavs((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))}
-                  onEdit={(id) => openBuilder(id)} onNew={() => openBuilder()} onShare={() => setView("share")} onSettings={() => setView("settings")} />
+                  onEdit={settings.advanced ? (id) => openBuilder(id) : undefined} onNew={settings.advanced ? () => openBuilder() : undefined} onShare={() => setView("share")} onSettings={() => setView("settings")} />
               )}
               {view === "builder" && dr.draft && (
                 <Builder draft={dr.draft} saved={myLooks.some((l) => l.id === dr.draft!.id)} templates={PRESETS}
@@ -880,16 +1005,16 @@ export default function Home() {
       )}
 
       <AnimatePresence>
-        {dev && view === "camera" && <DevelopCard key={dev.id} src={dev.url} onDone={() => setDev(null)} />}
+        {dev && view === "camera" && <DevelopCard key={dev.id} id={dev.id} src={dev.url} onDone={endDevelop} />}
       </AnimatePresence>
 
       <AnimatePresence>
         {toast && (
-          <motion.div key={toast.msg} role="status" initial={{ y: 14, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 8, opacity: 0 }} transition={snappy}
-            className="fixed inset-x-0 bottom-[86px] z-[70] mx-auto flex w-fit max-w-[88%] items-center gap-2.5 rounded-full bg-white/95 py-2 pl-4 pr-2 text-[13px] font-semibold text-black shadow-xl backdrop-blur">
+          <motion.div key={toast.k} role="status" initial={{ y: 14, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 8, opacity: 0 }} transition={snappy}
+            className="fixed inset-x-0 bottom-[86px] z-[70] mx-auto flex w-fit max-w-[88%] items-center gap-2.5 rounded-full bg-white/95 py-2 pl-4 pr-2 text-[0.8125rem] font-semibold text-black shadow-xl backdrop-blur">
             <span className="min-w-0 break-words">{toast.msg}</span>
             {toast.act
-              ? <button onClick={() => { const a = toast.act!; setToast(null); a.run(); }} className="shrink-0 rounded-full bg-black px-3 py-1.5 text-[12px] font-semibold text-white">{toast.act.label}</button>
+              ? <button onClick={() => { const a = toast.act!; setToast(); a.run(); }} className="shrink-0 rounded-full bg-black px-3 py-1.5 text-[0.75rem] font-semibold text-white">{toast.act.label}</button>
               : <span className="w-2" />}
           </motion.div>
         )}
@@ -901,7 +1026,7 @@ export default function Home() {
       <Sheet open={shelf} onClose={() => setShelf(false)} title="Camera shelf">
         <div className="mx-4 mb-4 flex rounded-xl bg-white/[0.07] p-[3px]">
           {([["cams", "Cameras"], ["film", "Film"], ["style", "Style"]] as const).map(([k, l]) => (
-            <button key={k} onClick={() => { tap(); setShelfTab(k); }} className="relative flex-1 rounded-[9px] py-1.5 text-[13px] font-medium">
+            <button key={k} onClick={() => { tap(); setShelfTab(k); }} className="relative flex-1 rounded-[9px] py-1.5 text-[0.8125rem] font-medium">
               {shelfTab === k && <motion.span layoutId="shelf-seg" className="absolute inset-0 rounded-[9px] bg-white/[0.14]" style={{ boxShadow: "0 1px 3px rgba(0,0,0,.4)" }} transition={smooth} />}
               <span className={`relative ${shelfTab === k ? "text-white" : "text-white/55"}`}>{l}</span>
             </button>
@@ -912,20 +1037,20 @@ export default function Home() {
           <div className="space-y-5">
             <div className="flex gap-4 overflow-x-auto px-4 pb-1">
               {["All", ...(myLooks.length ? ["My Looks"] : []), ...BRANDS].map((b) => (
-                <button key={b} onClick={() => setBrand(b)} className={`shrink-0 whitespace-nowrap text-[13px] font-medium transition-colors ${brand === b ? "text-[var(--accent)]" : "text-white/45"}`}>{b}</button>
+                <button key={b} onClick={() => setBrand(b)} className={`shrink-0 whitespace-nowrap text-[0.8125rem] font-medium transition-colors ${brand === b ? "text-[var(--accent)]" : "text-white/45"}`}>{b}</button>
               ))}
             </div>
             {rows.map(({ row, items }) => (
               <section key={row}>
-                <h3 className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">{row === "Mine" ? "My Looks" : row}</h3>
+                <h3 className="px-4 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">{row === "Mine" ? "My Looks" : row}</h3>
                 <div className="grid grid-cols-3 gap-2.5 px-4">
                   {items.map((c) => (
                     <button key={c.preset.id} onClick={() => { tap(); setCamId(c.preset.id); setShelf(false); }} className="text-center" title={c.preset.blurb}>
                       <div className={`rounded-2xl bg-white/[0.05] p-2 transition-shadow ${c.preset.id === camId ? "shadow-[inset_0_0_0_1.5px_var(--accent)]" : "hair"}`}>
                         <div className="h-[52px]"><CameraIcon body={c.body} color={c.color} /></div>
                       </div>
-                      <div className="mt-1.5 truncate text-[12px] font-medium">{c.preset.name}</div>
-                      <div className="truncate text-[10px] text-white/35">{c.brand} {c.model}</div>
+                      <div className="mt-1.5 truncate text-[0.75rem] font-medium">{c.preset.name}</div>
+                      <div className="truncate text-[0.6875rem] text-white/35">{c.brand} {c.model}</div>
                     </button>
                   ))}
                 </div>
@@ -936,7 +1061,7 @@ export default function Home() {
 
         {shelfTab === "film" && (
           <div>
-            <p className="px-4 pb-2 text-[13px] text-white/45">Film replaces the camera&apos;s colour and keeps its lens character.</p>
+            <p className="px-4 pb-2 text-[0.8125rem] text-white/45">Film replaces the camera&apos;s colour and keeps its lens character.</p>
             <FilmCarousel value={filmId} onPick={(f) => setFilmId(f?.id ?? null)} />
           </div>
         )}
@@ -945,8 +1070,8 @@ export default function Home() {
           <div className="space-y-6">
             <div className="px-4">
               <div className="flex items-baseline justify-between pb-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">Strength</span>
-                <span className="text-[13px] tabular-nums text-white/55">{Math.round(intensity * 100)}%</span>
+                <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">Strength</span>
+                <span className="text-[0.8125rem] tabular-nums text-white/55">{Math.round(intensity * 100)}%</span>
               </div>
               <input aria-label="Strength" type="range" min={0} max={1} step={0.01} value={intensity} onChange={(e) => setIntensity(+e.target.value)} className="w-full accent-[var(--accent)]" />
             </div>
@@ -957,18 +1082,18 @@ export default function Home() {
               ["Screen", [["off", "Off"], ["shoot", "Shooting"], ["play", "Playback"]] as const, lcd, (v: string) => setLcd(v as LcdMode)],
             ] as [string, readonly (readonly [string, string])[], string, (v: string) => void][]).map(([title, opts, cur, set]) => (
               <section key={title}>
-                <h3 className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">{title}</h3>
+                <h3 className="px-4 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">{title}</h3>
                 <div className="flex gap-2 overflow-x-auto px-4 pb-1">
                   {opts.map(([id, label]) => <button key={id} onClick={() => { tap(); set(id); }} className={chip(cur === id)}>{label}</button>)}
                 </div>
                 {title === "Watermark" && wmId === "custom" && (
                   <input value={wmText} onChange={(e) => setWmText(e.target.value)} maxLength={40} placeholder="Your watermark text"
-                    className="mx-4 mt-2.5 w-[calc(100%-2rem)] rounded-xl bg-white/[0.07] px-3.5 py-2.5 text-[15px] outline-none placeholder:text-white/30 focus:ring-2 focus:ring-[var(--accent)]" />
+                    className="mx-4 mt-2.5 w-[calc(100%-2rem)] rounded-xl bg-white/[0.07] px-3.5 py-2.5 text-[0.9375rem] outline-none placeholder:text-white/30 focus:ring-2 focus:ring-[var(--accent)]" />
                 )}
               </section>
             ))}
             <section>
-              <h3 className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/35">Extra effects</h3>
+              <h3 className="px-4 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">Extra effects</h3>
               <div className="flex gap-2 overflow-x-auto px-4 pb-1">
                 {EFFECTS.filter((e) => e.id !== "frame").map((e) => (
                   <button key={e.id} onClick={() => { tap(); setEffects((s) => { const n = new Set(s); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); return n; }); }} className={chip(effects.has(e.id))}>{e.label}</button>
@@ -976,7 +1101,7 @@ export default function Home() {
               </div>
             </section>
             <div className="px-4">
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/[0.07] py-3 text-[15px] font-medium">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/[0.07] py-3 text-[0.9375rem] font-medium">
                 <I n="image" className="h-[18px] w-[18px]" /> Import a photo
                 <input type="file" accept="image/*" hidden onChange={(e) => { importFile(e.target.files?.[0]); setShelf(false); }} />
               </label>
@@ -994,8 +1119,8 @@ export default function Home() {
           {PRO_CONTROLS.map((c) => (
             <div key={c.key}>
               <div className="flex items-baseline justify-between pb-1">
-                <span className="text-[13px] text-white/70">{c.label}</span>
-                <span className="text-[13px] tabular-nums text-white/45">{pro[c.key].toFixed(2)}</span>
+                <span className="text-[0.8125rem] text-white/70">{c.label}</span>
+                <span className="text-[0.8125rem] tabular-nums text-white/45">{pro[c.key].toFixed(2)}</span>
               </div>
               <input aria-label={c.label} type="range" min={c.min} max={c.max} step={c.step} value={pro[c.key]} onChange={(e) => setPro({ ...pro, [c.key]: +e.target.value })} className="w-full accent-[var(--accent)]" />
             </div>

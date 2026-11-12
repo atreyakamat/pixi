@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { snappy, tap } from "./motion";
+import { snappy } from "./motion";
 
 /** One button, three states: photo, idle video, recording. The ring never moves; only the core does. */
 export function Shutter({ video, recording, busy, onPress }: { video: boolean; recording: boolean; busy?: boolean; onPress: () => void }) {
@@ -8,7 +8,7 @@ export function Shutter({ video, recording, busy, onPress }: { video: boolean; r
     <motion.button
       aria-label={video ? (recording ? "Stop recording" : "Start recording") : "Take photo"}
       disabled={busy}
-      onClick={() => { tap(12); onPress(); }}
+      onClick={onPress}
       whileTap={{ scale: 0.9 }}
       transition={snappy}
       className="relative flex h-[74px] w-[74px] items-center justify-center rounded-full disabled:opacity-40"
