@@ -6,7 +6,7 @@ import { BRANDS, CAMERAS, EFFECTS, STAMPS, cameraFromPreset, withEffects, withFi
 import { Builder } from "@/ui/Builder";
 import { Gallery, type GalleryItem } from "@/ui/Gallery";
 import { FilmCarousel } from "@/ui/FilmCarousel";
-import { isNative, saveMessage, saveToGallery, shareFiles, shareOrSave } from "@/ui/native";
+import { isNative, saveAll, saveMessage, saveToGallery, shareFiles, shareOrSave, wasCancelled } from "@/ui/native";
 import { makeThumb, markExported, rollAdd, rollAll, rollDelete, trashAll, trashDrop, trashEmpty, trashRestore } from "@/ui/roll";
 import { ShareSheet } from "@/ui/ShareSheet";
 import { AnimatePresence, motion } from "framer-motion";
@@ -627,7 +627,7 @@ export default function PixiApp() {
       setBusy("");
       if (!r) { say("This phone can't record a clip from inside Pixi. Share the photo instead."); return; }
       const res = await shareOrSave(r.blob, `pixi-develop-${s.created}.${r.ext}`);
-      if (!res.ok) say(res.reason);
+      if (!res.ok && !wasCancelled(res)) say(res.reason);
     } catch { setBusy(""); say("The clip didn't finish. Try again with the camera closed."); }
   };
 
@@ -642,7 +642,7 @@ export default function PixiApp() {
     // The roll drops its oldest shots past the limit. A long carousel must never push originals out unasked.
     const over = shots.length + blobs.length - settings.rollLimit;
     if (over > 0) {
-      say(`Saving these would push your ${over} oldest ${over === 1 ? "shot" : "shots"} out of the roll (it keeps ${settings.rollLimit}). Share them instead, or raise the limit in Settings.`, { label: "Share", run: () => { void sharePages(blobs, extension); } });
+      say(`Saving these would push your ${over} oldest ${over === 1 ? "shot" : "shots"} out of the roll (it keeps ${settings.rollLimit}). Save them to your phone instead, or raise the limit in Settings.`, { label: "To phone", run: () => { void savePages(blobs, extension); } });
       return;
     }
     for (const b of blobs) await addShot(b, "photo", extension, { develop: false, quiet: blobs.length > 1 });
@@ -652,7 +652,20 @@ export default function PixiApp() {
 
   const sharePages = async (blobs: Blob[], extension: string) => {
     const r = await shareFiles(blobs, `pixi-${Date.now()}`, extension);
-    if (!r.ok) say(r.reason);
+    // A closed share sheet is not a failure, and must not leave a message behind.
+    if (!r.ok && !wasCancelled(r)) say(r.reason);
+  };
+
+  /** Writes a finished set straight to the phone, with a count while it works. */
+  const savePages = async (blobs: Blob[], extension: string) => {
+    if (!blobs.length) return;
+    setBusy(blobs.length > 1 ? `Saving 0 of ${blobs.length}…` : "Saving…");
+    const r = await saveAll(blobs, `pixi-${Date.now()}`, extension, (done, total) => {
+      if (total > 1) setBusy(`Saving ${done} of ${total}…`);
+    });
+    setBusy("");
+    if (r.ok) say(saveMessage(r));
+    else if (!wasCancelled(r)) say(r.reason, { label: "Share", run: () => { void sharePages(blobs, extension); } });
   };
 
   // Pinch to zoom, tap to focus.
