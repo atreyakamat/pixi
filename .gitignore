@@ -42,3 +42,8 @@ next-env.d.ts
 
 # Launch kit output: regenerate with scripts/launch-kit.mjs and your own photos
 /docs/launch/
+
+# Release signing: never commit these
+keystore.properties
+*.jks
+*.keystore

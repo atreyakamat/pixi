@@ -36,8 +36,9 @@ function PerfRows() {
 
 function Row({ label, sub, children }: { label: string; sub?: string; children?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <div className="min-w-0 flex-1">
+    // Wraps at large text sizes: the control drops under its label instead of squeezing it.
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 px-4 py-3">
+      <div className="min-w-[9.5rem] flex-1">
         <div className="text-[0.9375rem]">{label}</div>
         {sub && <div className="mt-0.5 text-[0.75rem] leading-snug text-white/40">{sub}</div>}
       </div>
@@ -59,7 +60,7 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
   return (
     <div className="flex shrink-0 rounded-lg bg-white/[0.08] p-[3px]">
       {options.map(([v, l]) => (
-        <button key={v} onClick={() => { tap(); onChange(v); }} className="relative rounded-[7px] px-3 py-1 text-[0.8125rem] font-medium">
+        <button key={v} onClick={() => { tap(); onChange(v); }} className="relative whitespace-nowrap rounded-[7px] px-3 py-1 text-[0.8125rem] font-medium">
           {value === v && <motion.span layoutId={`seg-${options.map((o) => o[0]).join()}`} className="absolute inset-0 rounded-[7px] bg-white/[0.16]" transition={smooth} />}
           <span className={`relative ${value === v ? "text-white" : "text-white/55"}`}>{l}</span>
         </button>
@@ -178,6 +179,7 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRe
         <Group title="About">
           <Row label="Pixi" sub={isNative() ? "Android app" : "Web app"} />
           <Row label="Free. On-device. No account." sub="Every look is rendered on this phone. Pixi has no server, no sign-in and no analytics, so your photos never leave the phone unless you share them." />
+          <a href="privacy/" className="block px-4 py-3 text-[0.9375rem] text-[var(--accent)]">Privacy policy</a>
         </Group>
       </div>
 

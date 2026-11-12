@@ -16,7 +16,7 @@ Pixi's security model is simple: **there is no server**. The app is static files
 | 6 | Backup zip import is a new untrusted-input surface | — | Built with validation from the start |
 | 7 | `npm audit` (production dependencies) | — | 0 vulnerabilities |
 | 8 | Secrets in the tree | — | None found |
-| 9 | Debug APK only; no release signing or Play config yet | Info | Open, by design for now |
+| 9 | Debug APK only; no release signing or Play config yet | Info | Signing config added (key stays outside the repo, see `docs/RELEASE.md`); R8 shrinking left off on purpose |
 | 10 | WebRTC Nearby has no authentication beyond the QR exchange | Info | Accepted, documented |
 
 ## Findings

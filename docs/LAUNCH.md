@@ -56,6 +56,6 @@ Pixi has no iOS build yet (Capacitor's iOS target needs a Mac with Xcode). The A
 
 - [ ] Real-phone checks in `docs/PERFORMANCE.md` pass.
 - [ ] Gallery save, share sheet and photo import tested on at least two Android phones (one Samsung).
-- [ ] Release-signed build (`docs/SECURITY-AUDIT.md`, finding 9).
+- [ ] Release-signed build: follow `docs/RELEASE.md`.
 - [ ] Screenshots and film re-made with your own photos.
-- [ ] Privacy policy page live: it can be three sentences, because the app collects nothing.
+- [ ] Privacy policy live: the page is built (`/privacy/`); it goes live with the web deploy.

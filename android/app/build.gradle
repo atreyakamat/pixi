@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+// Release signing. The keystore and its passwords live in android/keystore.properties, which is
+// git-ignored and never leaves your computer. Without that file, release builds come out unsigned.
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file("keystore.properties")
+if (keystoreFile.exists()) { keystoreFile.withInputStream { keystoreProps.load(it) } }
+
 android {
     namespace = "com.atreyakamat.pixi"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +13,9 @@ android {
         applicationId "com.atreyakamat.pixi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Play needs versionCode to go up by one on every upload.
+        versionCode((project.findProperty("pixiVersionCode") ?: "1") as Integer)
+        versionName(project.findProperty("pixiVersionName") ?: "1.0.0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +23,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystoreProps["storeFile"]) {
+                storeFile file(keystoreProps["storeFile"])
+                storePassword keystoreProps["storePassword"]
+                keyAlias keystoreProps["keyAlias"]
+                keyPassword keystoreProps["keyPassword"]
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keystoreProps["storeFile"]) { signingConfig signingConfigs.release }
+            // The app is a WebView around static files; there is almost no Java to shrink, and
+            // shrinking Capacitor plugins without tested keep-rules breaks them. Left off on purpose.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
