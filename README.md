@@ -12,6 +12,8 @@ Pixi is a retro camera that renders every look on your phone's GPU. There is no 
 - **Booth** — pick a frame, a 3-2-1 countdown, four shots land straight in it.
 - **Roll** — everything stays in Pixi until you export; a 30-day bin for mistakes; import from the phone; a zip backup you control.
 - **Share looks** — a look fits in a QR code. Scan one from another phone; nothing goes through a server.
+- **Sign your work** — an optional `@handle` credit in the corner of what Build makes.
+- **Offline on the web** — after one visit the hosted app runs with no connection.
 - **Profile** — a card with your name, best shots and the looks you shoot with, shared as an image, a link or a QR. No account: the profile rides inside the link.
 - **Nearby** — send photos phone to phone over a hotspot with WebRTC. No internet.
 
@@ -63,6 +65,8 @@ node scripts/backup-check.mjs        # backup round-trip, junk refused
 node scripts/layout-sheet.mjs        # every layout on one sheet → /tmp/layouts.jpg
 node scripts/clip-check.mjs          # the develop clip encodes
 node scripts/e2e-profile.mjs         # profile card, link round trip through /u/, hostile link refused
+node scripts/offline-check.mjs        # one visit, server stopped: landing, app, camera still work
+node scripts/sign-check.mjs           # the @handle credit: toggle, preview, remembered
 node scripts/e2e-landing.mjs         # landing page: live demo renders and reacts, phone and desktop
 node scripts/bigtext-check.mjs        # every screen at the largest text size on a small phone
 node scripts/privacy-check.mjs        # privacy page reachable, scrolls, returns

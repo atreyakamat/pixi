@@ -7,6 +7,8 @@ const target = process.env.PIXI_TARGET;
 const isApp = target === "app" || target === "web";
 
 const nextConfig: NextConfig = {
+  // The build target and a build stamp, readable in the browser. The stamp renews the offline worker on each deploy.
+  env: { NEXT_PUBLIC_PIXI_TARGET: target ?? "dev", NEXT_PUBLIC_PIXI_BUILD: String(Date.now()) },
   ...(isApp ? { output: "export" as const, images: { unoptimized: true }, trailingSlash: true } : {}),
   ...(isApp ? {} : { cacheComponents: true, partialPrefetching: true }),
   turbopack: {

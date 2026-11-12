@@ -30,6 +30,10 @@ interface Props {
   recentLookIds: string[];
   settings: Settings;
   setPair: (on: boolean) => void;
+  setSign: (on: boolean) => void;
+  /** The profile handle, without the @. Empty when there is no profile yet. */
+  handle: string;
+  onOpenProfile: () => void;
   /** Photos chosen in the Roll, filled in as soon as the screen opens. */
   seed?: string[];
   onOpenCamera: () => void;
@@ -63,7 +67,7 @@ function smartStart(photoIds: string[]): Doc {
 const bmpKey = (src: string, look: string | null) => `${src}|${look ?? "-"}`;
 const blank = (tplId: string, n: number): Doc => ({ tplId, srcs: Array(n).fill(null), looks: Array(n).fill(null), caps: Array(n).fill(""), values: {} });
 
-export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, seed, onOpenCamera, onImportPhotos, onExport, onShare }: Props) {
+export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, setSign, handle, onOpenProfile, seed, onOpenCamera, onImportPhotos, onExport, onShare }: Props) {
   // History and position move together as one value. Kept apart, two edits in the same tick leave
   // the position pointing past the end of the list, and the screen has nothing to render.
   const [past, setPast] = useState<{ docs: Doc[]; at: number }>(() => ({ docs: [smartStart(roll.filter((r) => r.kind === "photo").map((r) => r.id))], at: 0 }));
@@ -80,6 +84,7 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, see
   const { docs, at } = past;
   const doc = docs[at];
   const tpl = useMemo(() => layoutById(doc.tplId), [doc.tplId]);
+  const sign = settings.sign && handle ? `@${handle}` : undefined;
   const carousel = isCarousel(tpl);
   const maxPages = tpl.slides?.max ?? tpl.slots.length;
   const photos = useMemo(() => roll.filter((r) => r.kind === "photo"), [roll]);
@@ -150,11 +155,11 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, see
     const c = canvasRef.current; if (!c) return;
     if (carousel) {
       const i = Math.min(slot, Math.max(doc.srcs.length - 1, 0));
-      renderLayout(c, { template: tpl, photos: [bmpAt(i)], values: doc.values, scale: 1, placeholder: true, slide: { index: i + 1, total: Math.max(doc.srcs.length, 1), caption: doc.caps[i] ?? "" } });
+      renderLayout(c, { template: tpl, photos: [bmpAt(i)], values: doc.values, sign, scale: 1, placeholder: true, slide: { index: i + 1, total: Math.max(doc.srcs.length, 1), caption: doc.caps[i] ?? "" } });
     } else {
-      renderLayout(c, { template: tpl, photos: tpl.slots.map((_, i) => bmpAt(i)), values: doc.values, scale: 1, placeholder: true });
+      renderLayout(c, { template: tpl, photos: tpl.slots.map((_, i) => bmpAt(i)), values: doc.values, sign, scale: 1, placeholder: true });
     }
-  }, [tpl, carousel, slot, doc, bmpAt]);
+  }, [tpl, carousel, slot, doc, bmpAt, sign]);
 
   useEffect(() => { draw(); }, [draw, tick]);
 
@@ -255,15 +260,15 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, see
     if (carousel) {
       const live = doc.srcs.map((s, i) => ({ s, i })).filter((x) => x.s);
       for (let n = 0; n < live.length; n++) {
-        renderLayout(c, { template: tpl, photos: [bmpAt(live[n].i)], values: doc.values, scale, slide: { index: n + 1, total: live.length, caption: doc.caps[live[n].i] ?? "" } });
+        renderLayout(c, { template: tpl, photos: [bmpAt(live[n].i)], values: doc.values, sign, scale, slide: { index: n + 1, total: live.length, caption: doc.caps[live[n].i] ?? "" } });
         out.push(await layoutToBlob(c, mime(settings), settings.quality));
       }
     } else if (print) {
       // Prints are lossless so cut lines and crop marks stay crisp at 300 DPI.
-      renderLayout(c, { template: tpl, photos: tpl.slots.map((_, i) => bmpAt(i)), values: doc.values, scale });
+      renderLayout(c, { template: tpl, photos: tpl.slots.map((_, i) => bmpAt(i)), values: doc.values, sign, scale });
       out.push(await layoutToBlob(c, "image/png"));
     } else {
-      renderLayout(c, { template: tpl, photos: tpl.slots.map((_, i) => bmpAt(i)), values: doc.values, scale, pair: settings.stripPair });
+      renderLayout(c, { template: tpl, photos: tpl.slots.map((_, i) => bmpAt(i)), values: doc.values, sign, scale, pair: settings.stripPair });
       out.push(await layoutToBlob(c, mime(settings), settings.quality));
     }
     return out;
@@ -467,6 +472,15 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, see
 
           {tab === "text" && (
             <div className="space-y-3 px-4 pb-2">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.07] px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <div className="text-[0.9375rem]">Sign it{handle ? ` @${handle}` : ""}</div>
+                  <div className="text-[0.75rem] text-white/45">{handle ? "A small credit in the corner of the photo" : "Add a handle to your profile first"}</div>
+                </div>
+                {handle
+                  ? <button role="switch" aria-checked={settings.sign} aria-label="Sign with your handle" onClick={() => { tap(); setSign(!settings.sign); }} className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors ${settings.sign ? "bg-[var(--accent)]" : "bg-white/15"}`}><span className={`absolute top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow transition-transform ${settings.sign ? "translate-x-[22px]" : "translate-x-[2px]"}`} /></button>
+                  : <button onClick={() => { tap(); onOpenProfile(); }} className="shrink-0 whitespace-nowrap rounded-full bg-white/[0.12] px-3.5 py-1.5 text-[0.8125rem] font-medium">Set up</button>}
+              </div>
               {carousel && (
                 <label className="block">
                   <span className="mb-1 block text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">Caption · page {slot + 1}</span>

@@ -39,6 +39,7 @@ import { FILMS } from "@/presets/films";
 import { useDraft } from "@/ui/useDraft";
 import { loadFavs, loadLooks, lookToPreset, newId, persistFavs, persistLooks, presetToLook, type SavedLook } from "@/ui/store";
 import { PRESETS } from "@/presets";
+import { useToasts } from "@/ui/useToasts";
 import { ProfileScreen, type ProfileLook } from "@/ui/ProfileScreen";
 import { decodeProfile, EMPTY_PROFILE, loadProfile, persistProfile, type Profile } from "@/ui/profile";
 import { CameraIcon } from "@/ui/CameraIcon";
@@ -140,23 +141,7 @@ export default function PixiApp() {
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [filmId, setFilmId] = useState<string | null>(null);
   const [compare, setCompare] = useState(false);
-  type Toast = { msg: string; act?: { label: string; run: () => void }; k: number };
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const toast = toasts[0] ?? null;
-  const setToast = useCallback(() => setToasts((q) => q.slice(1)), []);
-  /**
-   * One way to talk to the person, one message at a time. A newer message replaces a waiting one of
-   * the same kind; a message with an action (a way out of a failure) always waits its turn.
-   * Passing an empty string clears everything.
-   */
-  const say = useCallback((msg: string, act?: { label: string; run: () => void }) => {
-    if (!msg) { setToasts([]); return; }
-    setToasts((q) => {
-      if (q.some((t) => t.msg === msg)) return q;
-      const keep = q.filter((t, i) => i === 0 || t.act);
-      return [...keep, { msg, act, k: Date.now() + Math.random() }].slice(-3);
-    });
-  }, []);
+  const { toast, say, dismiss: setToast } = useToasts();
   const [dev, setDev] = useState<{ id: string; url: string } | null>(null);
   const [trash, setTrash] = useState<BinnedShot[]>([]);
   const dr = useDraft();
@@ -257,7 +242,6 @@ export default function PixiApp() {
   useEffect(() => { if (looksReady) persistLooks(myLooks); }, [myLooks, looksReady]);
   useEffect(() => { if (looksReady) persistFavs(favs); }, [favs, looksReady]);
   useEffect(() => { if (looksReady) persistProfile(profile); }, [profile, looksReady]);
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(), toast.act ? 6000 : 2200); return () => clearTimeout(t); }, [toast, setToast]);
 
   // Fit the viewfinder box to the chosen aspect inside the available slot.
   useEffect(() => {
@@ -1015,7 +999,8 @@ export default function PixiApp() {
               )}
               {view === "build" && (
                 <BuildStudio roll={shots} looks={galleryItems} recentLookIds={recentIds} settings={settings}
-                  setPair={(on: boolean) => setSettings({ ...settings, stripPair: on })} seed={stripSeed}
+                  setPair={(on: boolean) => setSettings({ ...settings, stripPair: on })} setSign={(on: boolean) => setSettings({ ...settings, sign: on })}
+                  handle={profile.handle} onOpenProfile={() => setView("profile")} seed={stripSeed}
                   onOpenCamera={() => setView("camera")} onImportPhotos={importPhotos}
                   onExport={exportPages} onShare={sharePages} />
               )}

@@ -6,7 +6,7 @@ const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", hea
 const p = await b.newPage();
 const errs = []; p.on("pageerror", e => errs.push(String(e)));
 const only = process.argv[2] || "";
-await p.setContent(`<body style='margin:0'><script>window.__only=${JSON.stringify(only)}||undefined</script><canvas id=out></canvas></body>`);
+await p.setContent(`<body style='margin:0'><script>window.__only=${JSON.stringify(only)}||undefined;window.__sign=${JSON.stringify(process.env.PIXI_SIGN||null)}||undefined</script><canvas id=out></canvas></body>`);
 await p.addScriptTag({ content: fs.readFileSync("/tmp/strip.js", "utf8") });
 await p.waitForFunction("window.__done === true || window.__err", { timeout: 60000 });
 console.log("err:", await p.evaluate("window.__err || null"), "pageerrors:", JSON.stringify(errs));
