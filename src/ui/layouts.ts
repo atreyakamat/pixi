@@ -313,6 +313,8 @@ export interface RenderOpts {
   placeholder?: boolean;
   /** Carousel only: which page this is, counted from 1, and how many there are. */
   slide?: { index: number; total: number; caption?: string };
+  /** A small credit, usually "@handle", set up the right-hand edge like a photographer's mark on a film rebate. */
+  sign?: string;
 }
 export type RenderStripOpts = RenderOpts;
 
@@ -321,6 +323,40 @@ export function layoutSize(t: Layout, scale = 1, pair = false) {
   return { w: Math.round((pair ? t.w * 2 + gap : t.w) * scale), h: Math.round(t.h * scale), gap: Math.round(gap * scale) };
 }
 export const stripSize = layoutSize;
+
+/**
+ * The credit sits inside the photo, bottom-left of the last frame, like a watermark. Every layout
+ * has that spot and none of them puts its own text there (looks stamp their date bottom-right).
+ * A sheet of separate stickers gets it on each one. Ink is chosen from what is underneath.
+ * Drawn in layout units; the caller has already applied the scale.
+ */
+function drawSign(g: CanvasRenderingContext2D, t: Layout, text: string) {
+  const label = text.slice(0, 28);
+  const targets = t.kind === "print" && t.slots.length > 1 ? t.slots : t.slots.slice(-1);
+  for (const sl of targets) {
+    const round = (sl.r ?? 0) > sl.w * 0.3;
+    let size = Math.max(7, Math.min(sl.w, sl.h) * 0.05);
+    g.save();
+    g.font = `600 ${size}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+    // Never wider than 60% of the frame.
+    const w0 = g.measureText(label).width;
+    if (w0 > sl.w * 0.6) { size *= (sl.w * 0.6) / w0; g.font = `600 ${size}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`; }
+    const x = round ? sl.x + sl.w / 2 : sl.x + size * 0.9;
+    const y = round ? sl.y + sl.h * 0.84 : sl.y + sl.h - size * 1.1;
+    let dark = false;
+    try {
+      const m = g.getTransform();
+      const px = g.getImageData(Math.max(0, Math.round(m.a * (round ? x : x + size) + m.e)), Math.max(0, Math.round(m.d * y + m.f) - 2), 6, 4).data;
+      let lum = 0; for (let i = 0; i < px.length; i += 4) lum += px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+      dark = lum / (px.length / 4) > 165;
+    } catch { /* unreadable canvas: keep light ink */ }
+    g.textAlign = round ? "center" : "left"; g.textBaseline = "alphabetic";
+    g.fillStyle = dark ? "rgba(20,16,12,.7)" : "rgba(255,255,255,.88)";
+    g.shadowColor = dark ? "rgba(255,255,255,.35)" : "rgba(0,0,0,.55)"; g.shadowBlur = size * 0.35;
+    g.fillText(label, x, y);
+    g.restore();
+  }
+}
 
 export function renderLayout(canvas: HTMLCanvasElement, o: RenderOpts) {
   const t = o.template, scale = o.scale ?? 1;
@@ -366,6 +402,7 @@ export function renderLayout(canvas: HTMLCanvasElement, o: RenderOpts) {
       }
     });
     for (const d of t.over ?? []) drawDecor(g, d, t, vals);
+    if (o.sign) drawSign(g, t, o.sign);
     g.restore();
     g.restore();
   };

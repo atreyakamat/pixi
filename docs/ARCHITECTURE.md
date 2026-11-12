@@ -66,8 +66,15 @@ Every output (strip, card, carousel, contact sheet, print, sticker sheet) is a `
 
 The shutter shows a copy of the viewfinder in the same frame, then does the full-quality render. Success is silent; only problems speak. Motion uses the shared tokens in `src/ui/motion.ts`, and the system reduce-motion setting is honoured app-wide.
 
+## 7. The web version works offline
+
+**Decision.** The hosted build registers a small hand-written service worker (`public/sw.js`). On install it reads each page and stores every script and style the page refers to; pages are fetched fresh when online and served from the cache when not; hashed build files are served cache-first.
+
+**Why.** A camera has to work with no signal. Hand-written because the whole thing is about a hundred lines and a library would add a build step and a dependency for no gain.
+
+**Limits.** Only on the `web` target (the Android app's files are already on the phone; a cache in development would hide edits). The first visit needs a connection. Photos are not in this cache: they live in IndexedDB as before. `netlify.toml` serves `sw.js` with `no-cache` so updates are never stuck, and each build registers the worker under a new address.
+
 ## Known debt
 
-- `src/shell/PixiApp.tsx` is about 1,100 lines and owns too much (camera modes, capture, toasts, navigation). The next refactor should lift capture into a `useCapture` hook and the toast queue into its own module. It is covered by the e2e suites, which makes that refactor safe to do.
-- No offline install for the web version yet (no service worker). The Android app is fully offline already.
+- `src/shell/PixiApp.tsx` is about 1,100 lines and owns too much (camera modes, capture, navigation). The toast queue has moved out to `src/ui/useToasts.ts`; capture should follow as a `useCapture` hook. The e2e suites cover it, which makes that refactor safe to do.
 - Performance has only been measured in software rendering; see `docs/PERFORMANCE.md`.

@@ -56,7 +56,7 @@ export function Landing() {
               <a href="/app/" className="rounded-full bg-white px-7 py-4 text-[1.0625rem] font-semibold text-black transition-transform active:scale-95">Open the camera</a>
               {APK ? <a href={APK} className="rounded-full bg-white/10 px-7 py-4 text-[1.0625rem] font-semibold transition-transform active:scale-95">Get the Android app</a> : null}
             </motion.div>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-4 text-[0.8125rem] text-white/40">Works in your browser, no install. {APK ? "" : "The Android app is on the way."}</motion.p>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-4 text-[0.8125rem] text-white/40">Works in your browser, no install, and offline after your first visit. {APK ? "" : "The Android app is on the way."}</motion.p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 40, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ ...reveal, delay: 0.18 }}><LiveDemo /></motion.div>
         </section>

@@ -101,6 +101,11 @@ Phone-to-phone transfer uses WebRTC over the local network with no STUN/TURN and
 - **Landing page.** Same CSP as the app; the e2e test asserts it makes zero requests to any other host. Its only outbound links are to the GitHub repository.
 - **`/u/` writes to storage** (adds looks to this browser's Pixi) only when the person presses the button, never on load.
 
+## Addendum, offline worker and signatures
+
+- **Service worker** (`public/sw.js`, web build only). Same-origin GET requests only; it never fetches or caches another host, and the CSP still applies. It stores the site's own static files, never photos. A stale worker is the usual risk with these: `sw.js` is served `no-cache` and re-registered under a new address on every build, and pages are network-first, so an update cannot be pinned by an old cache.
+- **Signature on layouts.** The text comes from the person's own handle, already restricted to `[a-z0-9._]`, and is drawn to canvas.
+
 ## Input boundaries, reviewed
 
 | Boundary | Validation |

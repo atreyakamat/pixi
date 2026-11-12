@@ -15,6 +15,12 @@
     Referrer-Policy = "no-referrer"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains"
 
+# The offline worker must never be cached by the browser or the CDN, or updates would stall.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
 [[headers]]
   for = "/_next/static/*"
   [headers.values]
