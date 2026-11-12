@@ -17,6 +17,12 @@ export interface Slot {
   shadow?: number;
   /** A paper border around the photo, the way a print has one. `foot` makes the bottom edge deeper. */
   mat?: { w: number; color: string; foot?: number };
+  /**
+   * One photo stretched across the whole carousel: each page shows its own vertical slice, so the
+   * picture runs on unbroken as the reader swipes. The photo is taken from the first page, and the
+   * slice is chosen by which page is being drawn.
+   */
+  pan?: boolean;
 }
 
 export type Decor =
@@ -35,10 +41,13 @@ export type Decor =
   /** Darkens the corners the way a lens does. */
   | { k: "vignette"; strength: number; soft?: number }
   /** A flat colour over the page: the warm, faded cast of an old print. */
-  | { k: "wash"; color: string; alpha: number; mode?: "multiply" | "screen" | "overlay" | "soft-light" | "source-over" }
+  /** "saturation" with a grey colour drains the colour out of everything drawn so far. */
+  | { k: "wash"; color: string; alpha: number; mode?: "multiply" | "screen" | "overlay" | "soft-light" | "source-over" | "saturation" | "color" | "luminosity" | "hue" }
   /** A counter like 3/5, drawn as a small pill. Carousels use it; strips normally do not. */
   /** The page's own photo, blurred to fill the whole page and dimmed, as a backdrop for the sharp one on top. */
   | { k: "backdrop"; dim?: number; tint?: string }
+  /** A dot screen over a rectangle, the way newsprint reproduces a photograph. */
+  | { k: "halftone"; x: number; y: number; w: number; h: number; cell?: number; color?: string; amount?: number }
   | { k: "pill"; x: number; y: number; t: string; size: number; fg: string; bg: string; pad?: number; align?: "left" | "center" | "right" };
 
 export interface LayoutField { key: string; label: string; def: string; max: number }
@@ -225,6 +234,40 @@ function drawDecor(g: CanvasRenderingContext2D, d: Decor, t: Layout, vals: Recor
       }
       break;
     }
+    case "halftone": {
+      // Reads the pixels already drawn and lays a dot over each cell, sized by how dark that cell
+      // is — the way a newspaper press turns a continuous tone into ink dots.
+      const cell = d.cell ?? 9;
+      const amount = d.amount ?? 1;
+      const x0 = Math.max(0, Math.round(d.x)), y0 = Math.max(0, Math.round(d.y));
+      const w = Math.round(d.w), h = Math.round(d.h);
+      let data: ImageData;
+      try { data = g.getImageData(x0, y0, w, h); } catch { break; } // a tainted canvas: skip rather than throw
+      g.save();
+      roundRect(g, d.x, d.y, d.w, d.h); g.clip();
+      g.globalAlpha = amount;
+      g.fillStyle = d.color ?? "#15130F";
+      // Paper first, so the dots sit on white rather than over the photo they replace.
+      g.globalCompositeOperation = "source-over";
+      g.globalAlpha = amount;
+      g.fillStyle = "#EDE8DC";
+      g.fillRect(d.x, d.y, d.w, d.h);
+      g.fillStyle = d.color ?? "#15130F";
+      for (let y = 0; y < h; y += cell) {
+        for (let x = 0; x < w; x += cell) {
+          const i = ((y + (cell >> 1)) * w + (x + (cell >> 1))) * 4;
+          if (i + 2 >= data.data.length) continue;
+          const lum = (data.data[i] * 0.3 + data.data[i + 1] * 0.59 + data.data[i + 2] * 0.11) / 255;
+          const r = (cell / 2) * Math.sqrt(1 - lum) * 1.12;
+          if (r < 0.35) continue;
+          g.beginPath();
+          g.arc(x0 + x + cell / 2, y0 + y + cell / 2, Math.min(r, cell * 0.72), 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+      g.restore();
+      break;
+    }
     case "checker": {
       const cols = Math.ceil(d.w / d.cell), rows = Math.ceil(d.h / d.cell);
       g.save(); roundRect(g, d.x, d.y, d.w, d.h); g.clip();
@@ -334,6 +377,24 @@ function cover(g: CanvasRenderingContext2D, img: CanvasImageSource, iw: number, 
   g.restore();
 }
 
+/**
+ * One slice of a panorama. The photo is scaled so its height fills the slot and its width covers all
+ * `total` pages laid side by side, then the window for `index` is drawn. Scaling to the full run
+ * rather than to one page is what makes the seam disappear.
+ */
+function panSlice(g: CanvasRenderingContext2D, img: CanvasImageSource, iw: number, ih: number, s: Slot, index: number, total: number) {
+  const pages = Math.max(1, total);
+  const runW = s.w * pages;
+  const k = Math.max(runW / iw, s.h / ih);
+  const w = iw * k, h = ih * k;
+  // Where this page's window starts inside the whole run, with any spare width shared at the ends.
+  const left = (runW - w) / 2 + (index - 1) * -s.w;
+  g.save();
+  roundRect(g, s.x, s.y, s.w, s.h, s.r); g.clip();
+  g.drawImage(img, s.x + left, s.y + (s.h - h) / 2, w, h);
+  g.restore();
+}
+
 export interface LayoutPhoto { src: CanvasImageSource; w: number; h: number }
 export type StripPhoto = LayoutPhoto;
 
@@ -438,7 +499,10 @@ export function renderLayout(canvas: HTMLCanvasElement, o: RenderOpts) {
         g.fillStyle = s.mat?.color ?? "#000000"; g.fill();
         g.restore();
       }
-      if (p) cover(g, p.src, p.w, p.h, s);
+      // A panorama slot always draws the carousel's first photo, sliced by which page this is.
+      const panned = s.pan ? o.photos[0] : null;
+      if (s.pan && panned) panSlice(g, panned.src, panned.w, panned.h, s, o.slide?.index ?? 1, o.slide?.total ?? 1);
+      else if (p) cover(g, p.src, p.w, p.h, s);
       else if (o.placeholder) {
         roundRect(g, s.x, s.y, s.w, s.h, s.r);
         g.fillStyle = "rgba(0,0,0,.30)"; g.fill();

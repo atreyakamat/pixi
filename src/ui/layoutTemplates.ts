@@ -1,3 +1,4 @@
+import { CAROUSEL_STYLES } from "./carouselStyles";
 import type { Decor, Layout, Slot } from "./layouts";
 
 const W = 600, H = 1800;
@@ -535,8 +536,9 @@ export const LAYOUTS: Layout[] = [
   classic, theater, marquee, boarding, newsprint, slate, lace, minimal, filmstrip,
   // cards
   card, polaroid,
-  // carousels
+  // carousels: the eight built in, then the twenty-two that live in carouselStyles.ts
   instant, glass, noir, editorial, dump, fullFrame, postcard, mounted,
+  ...CAROUSEL_STYLES,
   // sheets
   contact,
   // prints
