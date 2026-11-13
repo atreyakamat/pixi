@@ -9,12 +9,13 @@ import { backupRoll, keepStorage, restoreRoll, storageEstimate } from "./backup"
 import { exportDocument } from "./native";
 import { BUDGET, report } from "./perf";
 import { isNative } from "./native";
+import { StudioSendPanel } from "./StudioSend";
 import { canPickFolder, loadSaveTarget, pickFolder, saveSaveTarget } from "./saveTarget";
 import { cameraState, micState, type PermState, requestMedia, settingsPath } from "./permissions";
 
 const mb = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
-function Group({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+export function Group({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
     <section>
       <h2 className="px-5 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-white/35">{title}</h2>
@@ -110,7 +111,7 @@ function PermissionsGroup() {
   );
 }
 
-function Row({ label, sub, children }: { label: string; sub?: string; children?: React.ReactNode }) {
+export function Row({ label, sub, children }: { label: string; sub?: string; children?: React.ReactNode }) {
   return (
     // Wraps at large text sizes: the control drops under its label instead of squeezing it.
     <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 px-4 py-3">
@@ -186,6 +187,7 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRe
       </header>
 
       <div className="space-y-6">
+        <StudioSendPanel say={say} />
         <Group title="Saving" note={settings.saveMode === "auto"
           ? "Every shot is kept in Pixi and copied to your phone's gallery straight away."
           : "Shots are kept in Pixi only. Open one from the Roll and tap Save when you want it on your phone."}>

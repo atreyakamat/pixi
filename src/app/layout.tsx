@@ -14,6 +14,9 @@ export const metadata: Metadata = {
  * network, no frames, no plugins. Next's static export inlines its bootstrap scripts, so inline
  * script and style stay allowed; blob and data URLs carry photos and QR codes.
  */
+// The studio build (NEXT_PUBLIC_PIXI_STUDIO=1) may send photos to its studio site and
+// to the storage that holds them. The public build keeps connect-src to itself.
+const STUDIO_HOSTS = process.env.NEXT_PUBLIC_PIXI_STUDIO === "1" ? `${(process.env.NEXT_PUBLIC_STUDIO_SITE ?? "").trim().replace(/\/+$/, "")} https://*.supabase.co` : "";
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
@@ -21,7 +24,7 @@ const CSP = [
   "img-src 'self' blob: data:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  "connect-src 'self' blob: data:",
+  `connect-src 'self' blob: data: ${STUDIO_HOSTS}`.replace(/ +$/, ""),
   "worker-src 'self' blob:",
   "frame-src 'none'",
   "object-src 'none'",
