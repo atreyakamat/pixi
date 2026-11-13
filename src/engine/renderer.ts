@@ -45,6 +45,8 @@ export interface RenderOptions {
   aspect?: number;
   /** Digital zoom, 1 = none. */
   zoom?: number;
+  /** Layers for the lens in front of the look, if one is fitted. */
+  lens?: LayerSpec[];
 }
 
 interface Target {
@@ -270,8 +272,10 @@ export class RetroRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[0].fbo);
     this.draw();
 
-    // 2) layer stack, ping-ponging between targets 1 and 2
-    const layers: LayerSpec[] = [...(opts.preset?.layers ?? [])];
+    // 2) layer stack, ping-ponging between targets 1 and 2.
+    // A lens goes in front of the look, so the look's grade, grain and vignette all land on the
+    // bent picture rather than being bent themselves.
+    const layers: LayerSpec[] = [...(opts.lens ?? []), ...(opts.preset?.layers ?? [])];
     const overlays: OverlaySpec[] = [...(opts.preset?.overlays ?? [])];
     if (opts.lcd !== "off") {
       layers.push({ kind: "scanlines", params: { lines: Math.round(h / 2.2), intensity: 0.14, angle: 35 } });

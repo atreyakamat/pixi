@@ -394,7 +394,9 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
           ))}
         </div>
 
-        <div className="h-[11.625rem] max-h-[38dvh] overflow-y-auto overscroll-contain pb-2">
+        {/* One row shorter than it was, which goes back to the preview. The extra bottom padding
+            keeps the last photo clear of the Save button rather than under it. */}
+        <div className="h-[10.5rem] max-h-[34dvh] overflow-y-auto overscroll-contain pb-3">
           {tab === "frame" && (
             <div className="flex gap-3 overflow-x-auto px-4 pb-2" style={{ scrollbarWidth: "none" }}>
               {frames.map((t) => (
@@ -417,22 +419,30 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
           )}
 
           {tab === "photos" && (
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2 overflow-x-auto px-4" style={{ scrollbarWidth: "none" }}>
-                {Array.from({ length: cap }, (_, i) => (
-                  <button key={i} onClick={() => { tap(); setSlot(i); }} aria-label={`${carousel ? "Page" : "Window"} ${i + 1}`}
-                    className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-white/[0.07] text-[0.8125rem] font-semibold ${i === slot ? "shadow-[inset_0_0_0_2px_var(--accent)]" : ""}`}>
-                    {doc.srcs[i] ? <img src={roll.find((r) => r.id === doc.srcs[i])?.url} alt="" className="h-full w-full object-cover" /> : <span className="text-white/40">{i + 1}</span>}
-                  </button>
-                ))}
-                {carousel && doc.srcs.length < maxPages && <span className="shrink-0 px-1 text-[0.6875rem] text-white/30">tap a photo to add</span>}
-              </div>
-
-              <div className="flex gap-2 overflow-x-auto px-4" style={{ scrollbarWidth: "none" }}>
-                <button onClick={() => { tap(); move(slot, -1); }} disabled={slot <= 0} aria-label="Move earlier" className={`${chip(false)} disabled:opacity-30`}>←</button>
-                <button onClick={() => { tap(); move(slot, 1); }} disabled={slot >= cap - 1} aria-label="Move later" className={`${chip(false)} disabled:opacity-30`}>→</button>
-                <button onClick={() => { tap(); fillRest(); }} disabled={!photos.length} className={chip(false)}>{carousel ? "Add all" : "Fill the rest"}</button>
-                {doc.srcs[slot] && <button onClick={() => { tap(); clearSlot(slot); }} className={chip(false)}>Remove</button>}
+            <div className="space-y-3">
+              {/* The pages and what you can do to the one you are on, in a single row. These were two
+                  rows, which pushed the photos themselves off the bottom of the screen. */}
+              <div className="flex items-center gap-2 px-4">
+                {/* Pinned, outside the scroll: with twenty pages these would otherwise sit off the
+                    right-hand edge, and acting on the page you are looking at would mean hunting. */}
+                {doc.srcs[slot] && (
+                  <span className="flex shrink-0 items-center gap-1 border-r border-white/10 pr-2">
+                    <button onClick={() => { tap(); move(slot, -1); }} disabled={slot <= 0} aria-label="Move this page earlier"
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-[0.9375rem] disabled:opacity-25">←</button>
+                    <button onClick={() => { tap(); move(slot, 1); }} disabled={slot >= cap - 1} aria-label="Move this page later"
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-[0.9375rem] disabled:opacity-25">→</button>
+                    <button onClick={() => { tap(); clearSlot(slot); }} aria-label="Remove this page"
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08]"><I n="trash" className="h-[15px] w-[15px]" /></button>
+                  </span>
+                )}
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                  {Array.from({ length: cap }, (_, i) => (
+                    <button key={i} onClick={() => { tap(); setSlot(i); }} aria-label={`${carousel ? "Page" : "Window"} ${i + 1}`}
+                      className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-white/[0.07] text-[0.8125rem] font-semibold ${i === slot ? "shadow-[inset_0_0_0_2px_var(--accent)]" : ""}`}>
+                      {doc.srcs[i] ? <img src={roll.find((r) => r.id === doc.srcs[i])?.url} alt="" className="h-full w-full object-cover" /> : <span className="text-white/40">{i + 1}</span>}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {photos.length === 0 ? (
@@ -450,6 +460,12 @@ export function BuildStudio({ roll, looks, recentLookIds, settings, setPair, set
                   </button>
                   <button onClick={() => fileRef.current?.click()} className="flex h-[92px] w-[64px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-white/[0.07] text-[0.6875rem] font-medium text-white/70">
                     <I n="plus" className="h-5 w-5" /> Phone
+                  </button>
+                  {/* Filling from the roll is a way of getting photos in, so it sits with the other two
+                      rather than in a row of its own above. */}
+                  <button onClick={() => { tap(); fillRest(); }} aria-label={carousel ? "Add every photo in your roll" : "Fill the empty windows"}
+                    className="flex h-[92px] w-[64px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-white/[0.07] text-center text-[0.6875rem] font-medium leading-tight text-white/70">
+                    <I n="grid" className="h-5 w-5" />{carousel ? "Add all" : "Fill rest"}
                   </button>
                   {photos.map((p) => {
                     const where = doc.srcs.indexOf(p.id);

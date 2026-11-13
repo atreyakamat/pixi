@@ -58,7 +58,7 @@ await p.reload({waitUntil:"domcontentloaded"}); await s(6000);
 await click(/^Build$/); await s(3000); await click(/^Photos$/); await s(500); await click(/^Add all$/); await s(2000);
 await p.evaluate(()=>[...document.querySelectorAll("button")].find(b=>/^Save \d+ pages to roll$/.test(b.textContent.trim()))?.click());
 for (let i=0;i<400;i++){ if (/oldest shots? out of the roll/.test(await text())) break; await s(500); }
-R.guard = /oldest shots? out of the roll/.test(await text()) && await p.evaluate(()=>[...document.querySelectorAll('[role="status"] button')].some(b=>b.textContent.trim()==="Share"));
+R.guard = /oldest shots? out of the roll/.test(await text()) && await p.evaluate(()=>[...document.querySelectorAll('[role="status"] button')].some(b=>b.textContent.trim()==="To phone"));
 R.nothingLost = await p.evaluate(async()=>{ const db=await new Promise((res)=>{ const r=indexedDB.open("pixi"); r.onsuccess=()=>res(r.result); }); return await new Promise((res)=>{ const q=db.transaction("roll").objectStore("roll").count(); q.onsuccess=()=>res(q.result); }); });
 console.log(JSON.stringify(R,null,1)); console.log("errors:",JSON.stringify(errs)); await b.close();
 const ok = R.imported45 && R.framesOffered && /3 Instagram posts of 20/.test(R.subtitle||"") && R.counter && R.saveLabel && R.exported45 && R.pages.n===45 && R.pages.wrongSize===0 && R.pages.blank===0 && R.pages.distinct>=40 && R.pages.backdropDrawn && R.guard && R.nothingLost===90;

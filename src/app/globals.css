@@ -5,19 +5,19 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", monospace;
 }
 
 html, body { background: #000; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
-body { color: var(--foreground); font-family: var(--font-sans), system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+body { color: var(--foreground); font-family: var(--font-sans); -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 input, textarea { -webkit-user-select: text; user-select: text; }
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
 .safe-b { padding-bottom: env(safe-area-inset-bottom); }
 .safe-t { padding-top: env(safe-area-inset-top); }
 .gpu { transform: translateZ(0); will-change: transform; }
-.lcd { font-family: var(--font-mono), ui-monospace, monospace; letter-spacing: .08em; }
+.lcd { font-family: var(--font-mono); letter-spacing: .08em; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 
 /* Touch targets: small round icon buttons draw at 36px but accept taps across 44px. */

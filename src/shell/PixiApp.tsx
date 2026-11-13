@@ -6,7 +6,7 @@ import { BRANDS, CAMERAS, EFFECTS, STAMPS, cameraFromPreset, withEffects, withFi
 import { Builder } from "@/ui/Builder";
 import { Gallery, type GalleryItem } from "@/ui/Gallery";
 import { FilmCarousel } from "@/ui/FilmCarousel";
-import { isNative, saveMessage, saveToGallery, shareFiles, shareOrSave } from "@/ui/native";
+import { isNative, saveAll, saveMessage, saveToGallery, shareFiles, shareOrSave, wasCancelled } from "@/ui/native";
 import { makeThumb, markExported, rollAdd, rollAll, rollDelete, trashAll, trashDrop, trashEmpty, trashRestore } from "@/ui/roll";
 import { ShareSheet } from "@/ui/ShareSheet";
 import { AnimatePresence, motion } from "framer-motion";
@@ -27,6 +27,9 @@ import { SettingsScreen } from "@/ui/Settings";
 import { keepStorage } from "@/ui/backup";
 import { canMakeClip, makeDevelopClip } from "@/ui/developClip";
 import { acceptMedia } from "@/ui/media";
+import { Learn } from "@/ui/Learn";
+import { LENSES, type LensId, lensById, loadLens, saveLens } from "@/ui/lenses";
+import type { LayerSpec } from "@/engine/types";
 import { ErrorBoundary } from "@/ui/ErrorBoundary";
 import { ext as extOf, mime as mimeOf, useSettings } from "@/ui/settings";
 import { noteUse, topUsed } from "@/ui/recent";
@@ -150,7 +153,7 @@ export default function PixiApp() {
   const [stamp, setStamp] = useState("preset");
   const [brand, setBrand] = useState("All");
   const [shelf, setShelf] = useState(false);
-  const [shelfTab, setShelfTab] = useState<"cams" | "film" | "style">("cams");
+  const [shelfTab, setShelfTab] = useState<"cams" | "lens" | "film" | "style">("cams");
   const [proSheet, setProSheet] = useState(false);
   /** Flash, timer, aspect, grid, lenses: hidden until asked for. */
   const [controls, setControls] = useState(false);
@@ -174,6 +177,8 @@ export default function PixiApp() {
   const [wmId, setWmId] = useState<WatermarkId>("off");
   const [wmText, setWmText] = useState("");
   const [zoom, setZoom] = useState(1);
+  // The lens in front of the look. Kept out of the look itself so all 84 can be shot through any of them.
+  const [lens, setLens] = useState<LensId>("none");
   const [focus, setFocus] = useState<[number, number]>([0.5, 0.45]);
   const [portraitBlur, setPortraitBlur] = useState(0.8);
   const [pro, setPro] = useState<ProState>(PRO_DEFAULT);
@@ -206,11 +211,11 @@ export default function PixiApp() {
     return { ...moded, overlays: [...base, ...frame, ...watermarkOverlays(wmId, camDef, wmText)] };
   }, [camDef, film, effects, stamp, mode, pro, focus, portraitBlur, wmId, wmText, frameId, building, dr.draft]);
 
-  const optsRef = useRef({ preset, intensity, mirror: false, lcd, aspect, zoom });
+  const optsRef = useRef({ preset, intensity, mirror: false, lcd, aspect, zoom, lens: [] as LayerSpec[] });
   // The render loop reads the latest values through refs; they are written after render, never during it.
   useLayoutEffect(() => {
     viewRef.current = view; bootRef.current = boot; sheetRef.current = shelf || proSheet;
-    optsRef.current = { preset, intensity: compare && building ? 0 : intensity, mirror, lcd, aspect, zoom };
+    optsRef.current = { preset, intensity: compare && building ? 0 : intensity, mirror, lcd, aspect, zoom, lens: lensById(lens).layers };
   });
 
   // Restore and persist simple settings. Reading localStorage must wait for mount so server and first client render match.
@@ -219,7 +224,7 @@ export default function PixiApp() {
       const s = JSON.parse(localStorage.getItem("pixi:v2") ?? "{}");
       const mine = loadLooks();
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMyLooks(mine); setFavs(loadFavs()); setProfile(loadProfile());
+      setMyLooks(mine); setFavs(loadFavs()); setProfile(loadProfile()); setLens(loadLens());
       if (s.camId && (CAMERAS.some((c) => c.preset.id === s.camId) || mine.some((l) => l.id === s.camId))) setCamId(s.camId);
       if (s.filmId && FILMS.some((f) => f.id === s.filmId)) setFilmId(s.filmId);
       if (s.aspectId) setAspectId(s.aspectId);
@@ -412,16 +417,24 @@ export default function PixiApp() {
   const importPhotos = async (files: FileList | null) => {
     const list = Array.from(files ?? []).slice(0, 200);
     if (!list.length) return;
-    say(list.length === 1 ? "Adding a photo…" : `Adding ${list.length} photos…`);
+    say(list.length === 1 ? "Adding…" : `Adding ${list.length} files…`);
     let ok = 0;
+    let videos = 0;
     for (const f of list) {
       // Trust the bytes, not the name: a renamed file is retyped or refused here.
       const m = await acceptMedia(f);
       if (!m) continue;
-      try { await addShot(m.blob, m.kind, m.ext, { develop: false, autoSave: false, quiet: true }); ok++; }
-      catch { /* skip anything the phone will not decode */ }
+      try {
+        await addShot(m.blob, m.kind, m.ext, { develop: false, autoSave: false, quiet: true });
+        ok++;
+        if (m.kind === "video") videos++;
+      } catch { /* skip anything the phone will not decode */ }
     }
-    say(ok ? `${ok} added to your roll` : "Those files aren't photos Pixi can open. Try JPEG or PNG.");
+    const skipped = list.length - ok;
+    if (!ok) { say("Pixi can't open those. It takes JPEG, PNG and WebP photos, and MP4 or WebM video."); return; }
+    const what = videos === ok ? (ok === 1 ? "video" : "videos") : videos ? "photos and videos" : ok === 1 ? "photo" : "photos";
+    // Saying how many were refused is the difference between a quiet loss and a known one.
+    say(`${ok} ${what} added${skipped ? `, ${skipped} Pixi couldn't open` : ""}`);
   };
 
   // Load saved shots on launch so nothing is lost when the app is closed. Also used after a restore.
@@ -627,7 +640,7 @@ export default function PixiApp() {
       setBusy("");
       if (!r) { say("This phone can't record a clip from inside Pixi. Share the photo instead."); return; }
       const res = await shareOrSave(r.blob, `pixi-develop-${s.created}.${r.ext}`);
-      if (!res.ok) say(res.reason);
+      if (!res.ok && !wasCancelled(res)) say(res.reason);
     } catch { setBusy(""); say("The clip didn't finish. Try again with the camera closed."); }
   };
 
@@ -642,7 +655,7 @@ export default function PixiApp() {
     // The roll drops its oldest shots past the limit. A long carousel must never push originals out unasked.
     const over = shots.length + blobs.length - settings.rollLimit;
     if (over > 0) {
-      say(`Saving these would push your ${over} oldest ${over === 1 ? "shot" : "shots"} out of the roll (it keeps ${settings.rollLimit}). Share them instead, or raise the limit in Settings.`, { label: "Share", run: () => { void sharePages(blobs, extension); } });
+      say(`Saving these would push your ${over} oldest ${over === 1 ? "shot" : "shots"} out of the roll (it keeps ${settings.rollLimit}). Save them to your phone instead, or raise the limit in Settings.`, { label: "To phone", run: () => { void savePages(blobs, extension); } });
       return;
     }
     for (const b of blobs) await addShot(b, "photo", extension, { develop: false, quiet: blobs.length > 1 });
@@ -652,7 +665,20 @@ export default function PixiApp() {
 
   const sharePages = async (blobs: Blob[], extension: string) => {
     const r = await shareFiles(blobs, `pixi-${Date.now()}`, extension);
-    if (!r.ok) say(r.reason);
+    // A closed share sheet is not a failure, and must not leave a message behind.
+    if (!r.ok && !wasCancelled(r)) say(r.reason);
+  };
+
+  /** Writes a finished set straight to the phone, with a count while it works. */
+  const savePages = async (blobs: Blob[], extension: string) => {
+    if (!blobs.length) return;
+    setBusy(blobs.length > 1 ? `Saving 0 of ${blobs.length}…` : "Saving…");
+    const r = await saveAll(blobs, `pixi-${Date.now()}`, extension, (done, total) => {
+      if (total > 1) setBusy(`Saving ${done} of ${total}…`);
+    });
+    setBusy("");
+    if (r.ok) say(saveMessage(r));
+    else if (!wasCancelled(r)) say(r.reason, { label: "Share", run: () => { void sharePages(blobs, extension); } });
   };
 
   // Pinch to zoom, tap to focus.
@@ -885,6 +911,14 @@ export default function PixiApp() {
               <span className="pointer-events-none absolute inset-x-0 bottom-14 text-center text-[0.6875rem] text-white/55">Tap to set focus</span>
             )}
 
+            {lens !== "none" && cam.live && !busy && (
+              <button onClick={() => { tap(); setShelfTab("lens"); setShelf(true); }} onPointerDown={(e) => e.stopPropagation()}
+                aria-label={`${lensById(lens).name} lens fitted. Change it`}
+                className="t-footnote absolute right-3 top-3 whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 font-medium backdrop-blur-md">
+                {lensById(lens).name} lens
+              </button>
+            )}
+
             {still && !cam.live && (
               <button onClick={() => { tap(); void startCamera(cam.facing); }} onPointerDown={(e) => e.stopPropagation()}
                 data-pixi="still-pill" className="t-footnote absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/55 px-3.5 py-1.5 font-medium backdrop-blur-md">
@@ -991,7 +1025,7 @@ export default function PixiApp() {
                 <Gallery items={galleryItems} selectedId={camId} favs={favs} recentIds={recentIds}
                   onPick={(id) => { setCamId(id); setView("camera"); }}
                   onFav={(id) => setFavs((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))}
-                  onEdit={settings.advanced ? (id) => openBuilder(id) : undefined} onNew={settings.advanced ? () => openBuilder() : undefined} onShare={() => setView("share")} onSettings={() => setView("settings")}
+                  onEdit={settings.advanced ? (id) => openBuilder(id) : undefined} onNew={settings.advanced ? () => openBuilder() : undefined} onShare={() => setView("share")} onSettings={() => setView("settings")} onLearn={() => setView("learn")}
                   onProfile={() => setView("profile")} avatar={profile.avatar} />
               )}
               {view === "builder" && dr.draft && (
@@ -1014,6 +1048,19 @@ export default function PixiApp() {
                   handle={profile.handle} onOpenProfile={() => setView("profile")} seed={stripSeed}
                   onOpenCamera={() => setView("camera")} onImportPhotos={importPhotos}
                   onExport={exportPages} onShare={sharePages} />
+              )}
+              {view === "learn" && (
+                <Learn onClose={() => setView("looks")} onGo={(d) => {
+                  // Each card lands on the screen it describes, with the right drawer already open.
+                  if (d === "camera") setView("camera");
+                  else if (d === "shelf") { setView("camera"); setShelfTab("cams"); setShelf(true); }
+                  else if (d === "lens") { setView("camera"); setShelfTab("lens"); setShelf(true); }
+                  else if (d === "looks") setView("looks");
+                  else if (d === "roll") setView("roll");
+                  else if (d === "build" || d === "frames" || d === "prints") setView("build");
+                  else if (d === "profile") setView("profile");
+                  else setView("settings");
+                }} />
               )}
               {view === "settings" && (
                 <SettingsScreen settings={settings} setSettings={setSettings} onClose={() => setView("looks")}
@@ -1057,13 +1104,31 @@ export default function PixiApp() {
 
       <Sheet open={shelf} onClose={() => setShelf(false)} title="Camera shelf">
         <div className="mx-4 mb-4 flex rounded-xl bg-white/[0.07] p-[3px]">
-          {([["cams", "Cameras"], ["film", "Film"], ["style", "Style"]] as const).map(([k, l]) => (
+          {([["cams", "Cameras"], ["lens", "Lens"], ["film", "Film"], ["style", "Style"]] as const).map(([k, l]) => (
             <button key={k} onClick={() => { tap(); setShelfTab(k); }} className="relative flex-1 rounded-[9px] py-1.5 text-[0.8125rem] font-medium">
               {shelfTab === k && <motion.span layoutId="shelf-seg" className="absolute inset-0 rounded-[9px] bg-white/[0.14]" style={{ boxShadow: "0 1px 3px rgba(0,0,0,.4)" }} transition={smooth} />}
               <span className={`relative ${shelfTab === k ? "text-white" : "text-white/55"}`}>{l}</span>
             </button>
           ))}
         </div>
+
+        {shelfTab === "lens" && (
+          <div className="space-y-2 px-4 pb-2">
+            <p className="pb-1 text-[0.75rem] leading-relaxed text-white/40">
+              A lens goes in front of whatever camera you have loaded, so you can shoot any look through any of these.
+            </p>
+            {LENSES.map((l) => (
+              <button key={l.id} onClick={() => { tap(); setLens(l.id); saveLens(l.id); }}
+                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left ${l.id === lens ? "bg-white/[0.14] shadow-[inset_0_0_0_1.5px_var(--accent)]" : "bg-white/[0.05]"}`}>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.9375rem] font-semibold">{l.name}</span>
+                  <span className="mt-0.5 block text-[0.75rem] text-white/45">{l.hint}</span>
+                </span>
+                {l.id === lens && <I n="check" className="h-[18px] w-[18px] shrink-0 text-[var(--accent)]" w={2.4} />}
+              </button>
+            ))}
+          </div>
+        )}
 
         {shelfTab === "cams" && (
           <div className="space-y-5">
