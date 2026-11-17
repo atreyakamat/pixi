@@ -207,11 +207,19 @@ export const LAYER_DEFS: Record<GpuLayerKind, LayerDef> = {
       vec2 px = uv*u_res/sc;
       float t = p_animate > 0.5 ? floor(u_time*14.0) : 0.0;
       vec2 sd = vec2(t*13.7, t*7.3);
-      float n = gnoise(px + sd);
-      vec3 cn = vec3(gnoise(px+sd+11.1), gnoise(px+sd+37.7), gnoise(px+sd+71.3));
+      // Two octaves, not one: a soft clump the size of p_size, plus a sharp, un-smoothed speck
+      // layer at roughly twice the density. Real negative grain is clumped at several scales at
+      // once; a single blurred noise field just looks like mush blown up.
+      vec2 fpx = px*2.3;
+      float nBase = gnoise(px + sd);
+      float nFine = hash21(floor(fpx) + sd*1.7)*2.0 - 1.0;
+      float n = mix(nBase, nFine, 0.45);
+      vec3 cnBase = vec3(gnoise(px+sd+11.1), gnoise(px+sd+37.7), gnoise(px+sd+71.3));
+      vec3 cnFine = vec3(hash21(floor(fpx)+sd*1.7+11.1), hash21(floor(fpx)+sd*1.7+37.7), hash21(floor(fpx)+sd*1.7+71.3))*2.0 - 1.0;
+      vec3 cn = mix(cnBase, cnFine, 0.45);
       float l = luma(c);
       float w = mix(1.0, 4.0*l*(1.0-l) + 0.15, p_response);
-      c += mix(vec3(n), cn, p_chroma) * p_amount * 0.28 * w;
+      c += mix(vec3(n), cn, p_chroma) * p_amount * 0.3 * w;
     `,
   },
   lofi: {

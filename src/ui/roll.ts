@@ -10,8 +10,16 @@ export interface RollItem {
   thumb?: Blob;
   created: number;
   camera?: string;
+  /** The look (filter) that was live when this was shot. */
+  look?: string;
+  /** The film stock that was loaded, if any. */
+  film?: string;
+  /** A rough, one-shot fix taken at capture time. Never a map, never sent anywhere. */
+  geo?: { lat: number; lon: number };
   /** True once the file has also been written to the phone's gallery. */
   exported?: boolean;
+  /** Hearted in the viewer. Purely local — nothing is shared by liking a shot. */
+  liked?: boolean;
 }
 
 /** A deleted shot, kept for a while so one mis-tap is not the end of it. */
@@ -92,6 +100,23 @@ export async function markExported(id: string) {
     const d = await db();
     const cur = await d.get("roll", id);
     if (cur) await d.put("roll", { ...cur, exported: true });
+  } catch { /* ignore */ }
+}
+
+export async function rollLike(id: string, liked: boolean): Promise<void> {
+  try {
+    const d = await db();
+    const cur = await d.get("roll", id);
+    if (cur) await d.put("roll", { ...cur, liked });
+  } catch { /* ignore */ }
+}
+
+/** Patches in a location fix that arrived after the shot was already saved. */
+export async function rollGeoTag(id: string, geo: { lat: number; lon: number }): Promise<void> {
+  try {
+    const d = await db();
+    const cur = await d.get("roll", id);
+    if (cur) await d.put("roll", { ...cur, geo });
   } catch { /* ignore */ }
 }
 
