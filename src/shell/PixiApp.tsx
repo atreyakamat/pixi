@@ -7,7 +7,8 @@ import { Builder } from "@/ui/Builder";
 import { Gallery, type GalleryItem } from "@/ui/Gallery";
 import { FilmCarousel } from "@/ui/FilmCarousel";
 import { isNative, saveAll, saveMessage, saveToGallery, shareFiles, shareOrSave, wasCancelled } from "@/ui/native";
-import { makeThumb, markExported, rollAdd, rollAll, rollDelete, trashAll, trashDrop, trashEmpty, trashRestore } from "@/ui/roll";
+import { makeThumb, markExported, rollAdd, rollAll, rollDelete, rollGeoTag, rollLike, trashAll, trashDrop, trashEmpty, trashRestore } from "@/ui/roll";
+import { lastFix } from "@/ui/permissions";
 import { ShareSheet } from "@/ui/ShareSheet";
 import { AnimatePresence, motion } from "framer-motion";
 import { I, type IconName } from "@/ui/icons";
@@ -52,7 +53,10 @@ import { PRO_CONTROLS, PRO_DEFAULT, applyMode, type ModeId, type ProState } from
 import { WATERMARKS, watermarkOverlays, type WatermarkId } from "@/ui/watermarks";
 import { encodeTimelapse } from "@/ui/timelapse";
 
-type Shot = { id: string; url: string; kind: "photo" | "video"; ext: string; blob: Blob; created: number; exported?: boolean };
+type Shot = {
+  id: string; url: string; kind: "photo" | "video"; ext: string; blob: Blob; created: number; exported?: boolean;
+  camera?: string; look?: string; film?: string; geo?: { lat: number; lon: number }; liked?: boolean;
+};
 
 const ASPECTS = [
   { id: "look", label: "Auto", v: 0 },
@@ -369,14 +373,18 @@ export default function PixiApp() {
   const addShot = async (blob: Blob, kind: Shot["kind"], ext: string, o: AddOpts = {}): Promise<Shot> => {
     const created = nowMs();
     const thumb = kind === "photo" ? await makeThumb(blob) : undefined;
-    const item: Shot = { id: o.id ?? newShotId(), url: URL.createObjectURL(thumb ?? blob), kind, ext, blob, created };
+    const camera = `${camDef.brand} ${camDef.model}`, look = camDef.preset.name, filmName = film?.name;
+    const id = o.id ?? newShotId();
+    const item: Shot = { id, url: URL.createObjectURL(thumb ?? blob), kind, ext, blob, created, camera, look, film: filmName };
     setShots((s) => [item, ...s]);
     if (kind === "photo" && o.develop !== false) {
       setSnap((n) => n + 1);
       if (settings.develop) { setDevDone(null); setDev({ id: item.id, url: item.url }); }
     }
+    // Never let a slow GPS fix hold up the shutter: the shot lands now, the location tags on when it arrives.
+    void lastFix().then((geo) => { if (geo) { setShots((s) => s.map((x) => (x.id === id ? { ...x, geo } : x))); void rollGeoTag(id, geo); } });
     const autoSave = o.autoSave ?? settings.saveMode === "auto";
-    const r = await rollAdd({ id: item.id, kind, ext, blob, thumb, created, camera: camDef.model }, { autoSave, limit: settings.rollLimit });
+    const r = await rollAdd({ id: item.id, kind, ext, blob, thumb, created, camera, look, film: filmName }, { autoSave, limit: settings.rollLimit });
     if (o.quiet) return item;
     if (r.save) {
       // Success is silent: the photo appearing is the confirmation. Only problems speak up.
@@ -411,6 +419,12 @@ export default function PixiApp() {
     if (!back) return;
     setShots((x) => [{ ...back, url: URL.createObjectURL(back.thumb ?? back.blob) }, ...x].sort((a, b) => b.created - a.created));
     say("Back in your roll");
+  };
+
+  const likeShot = (s: Shot) => {
+    const liked = !s.liked;
+    setShots((x) => x.map((y) => (y.id === s.id ? { ...y, liked } : y)));
+    void rollLike(s.id, liked);
   };
 
   /** Photos already on the phone. Pixi lays them out; it does not need to have taken them. */
@@ -1040,7 +1054,7 @@ export default function PixiApp() {
                   onRestore={restoreShot}
                   onDrop={async (id) => { await trashDrop(id); setTrash(await trashAll()); }}
                   onEmptyBin={async () => { await trashEmpty(); setTrash([]); say("Bin emptied"); }}
-                  onClip={clipOk ? clipShot : undefined} />
+                  onClip={clipOk ? clipShot : undefined} onLike={likeShot} />
               )}
               {view === "build" && (
                 <BuildStudio roll={shots} looks={galleryItems} recentLookIds={recentIds} settings={settings}

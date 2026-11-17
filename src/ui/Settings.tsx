@@ -11,7 +11,7 @@ import { BUDGET, report } from "./perf";
 import { isNative } from "./native";
 import { StudioSendPanel } from "./StudioSend";
 import { canPickFolder, loadSaveTarget, pickFolder, saveSaveTarget } from "./saveTarget";
-import { cameraState, micState, type PermState, requestMedia, settingsPath } from "./permissions";
+import { cameraState, locationState, micState, type PermState, requestLocation, requestMedia, settingsPath } from "./permissions";
 
 const mb = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
@@ -78,7 +78,8 @@ function WhereGroup({ say }: { say: (m: string) => void }) {
 function PermissionsGroup() {
   const [cam, setCam] = useState<PermState>("unknown");
   const [mic, setMic] = useState<PermState>("unknown");
-  const refresh = () => { void cameraState().then(setCam); void micState().then(setMic); };
+  const [loc, setLoc] = useState<PermState>("unknown");
+  const refresh = () => { void cameraState().then(setCam); void micState().then(setMic); void locationState().then(setLoc); };
   // The states come from the platform asynchronously, so they land after mount by nature.
   useEffect(refresh, []);
 
@@ -88,9 +89,14 @@ function PermissionsGroup() {
     await requestMedia(kind);
     refresh();
   };
+  const askLocation = async () => {
+    tap();
+    await requestLocation();
+    refresh();
+  };
 
   return (
-    <Group title="Permissions" note={cam === "denied" || mic === "denied"
+    <Group title="Permissions" note={cam === "denied" || mic === "denied" || loc === "denied"
       ? `A blocked permission can only be changed by your phone: ${settingsPath}.`
       : "Pixi asks for these only when a feature needs them, and works without them."}>
       <Row label="Camera" sub={`${word(cam)} · the viewfinder`}>
@@ -104,6 +110,13 @@ function PermissionsGroup() {
         {mic !== "granted" && (
           <button onClick={() => void ask("microphone")} className="shrink-0 rounded-full bg-white/[0.12] px-3.5 py-1.5 text-[0.8125rem] font-medium">
             {mic === "denied" ? "How to fix" : "Allow"}
+          </button>
+        )}
+      </Row>
+      <Row label="Location" sub={`${word(loc)} · roughly where a shot was taken`}>
+        {loc !== "granted" && (
+          <button onClick={() => void askLocation()} className="shrink-0 rounded-full bg-white/[0.12] px-3.5 py-1.5 text-[0.8125rem] font-medium">
+            {loc === "denied" ? "How to fix" : "Allow"}
           </button>
         )}
       </Row>

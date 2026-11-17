@@ -5,7 +5,16 @@ import { I } from "./icons";
 import { useObjectUrl, useObjectUrls } from "./useObjectUrl";
 import { fade, morph, press, snappy, tap } from "./motion";
 
-export interface RollShot { id: string; url: string; kind: "photo" | "video"; ext: string; blob: Blob; created: number; exported?: boolean }
+export interface RollShot {
+  id: string; url: string; kind: "photo" | "video"; ext: string; blob: Blob; created: number; exported?: boolean;
+  camera?: string; look?: string; film?: string; geo?: { lat: number; lon: number }; liked?: boolean;
+}
+
+/** "15.4909° N, 73.8278° E" — a rough fix, never a place name or a map, so nothing has to leave the phone to show it. */
+function coordLabel(geo: { lat: number; lon: number }) {
+  const part = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(4)}° ${v >= 0 ? pos : neg}`;
+  return `${part(geo.lat, "N", "S")}, ${part(geo.lon, "E", "W")}`;
+}
 
 const dayOf = (t: number) => {
   const d = new Date(t), now = new Date();
@@ -18,18 +27,24 @@ const dayOf = (t: number) => {
 
 export interface BinnedShot { id: string; kind: "photo" | "video"; blob: Blob; thumb?: Blob; created: number; binned: number }
 
-export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImport, onMakeStrip, onRestore, onDrop, onEmptyBin, onClip }: {
+export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImport, onMakeStrip, onRestore, onDrop, onEmptyBin, onClip, onLike }: {
   shots: RollShot[]; trash: BinnedShot[];
   onShare: (s: RollShot) => void; onSave: (s: RollShot) => void; onDelete: (s: RollShot) => void;
   onCamera: () => void; onImport: (files: FileList | null) => void; onMakeStrip: (ids: string[]) => void;
   onRestore: (id: string) => void; onDrop: (id: string) => void; onEmptyBin: () => void;
   /** Makes a short clip of the photo developing. Absent where the browser cannot record video. */
   onClip?: (s: RollShot) => void;
+  /** Hearts or un-hearts a shot. Local only — nothing about a like leaves the phone. */
+  onLike: (s: RollShot) => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<string[]>([]);
   const [bin, setBin] = useState(false);
+  // Keyed to the shot it belongs to, so switching photos starts with the panel closed without an effect.
+  const [infoFor, setInfoFor] = useState<string | null>(null);
+  const [burst, setBurst] = useState(0);
+  const lastTap = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Previews for the bin exist only while it is open and are revoked when it closes.
@@ -41,6 +56,19 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
   // The grid holds small previews; the viewer loads the real photo only while it is open.
   const full = useObjectUrl(cur?.blob, cur?.id);
   const idx = cur ? shots.indexOf(cur) : -1;
+  const info = !!cur && infoFor === cur.id;
+  const toggleInfo = () => { tap(); setInfoFor((v) => (cur && v !== cur.id ? cur.id : null)); };
+
+  const likeNow = (s: RollShot) => { tap(); onLike(s); };
+  const onImageTap = (s: RollShot) => {
+    const now = Date.now();
+    if (now - lastTap.current < 320) {
+      if (!s.liked) likeNow(s);
+      setBurst(now);
+      window.setTimeout(() => setBurst((b) => (b === now ? 0 : b)), 650);
+    }
+    lastTap.current = now;
+  };
 
   const groups: { day: string; items: RollShot[] }[] = [];
   for (const s of shots) {
@@ -90,6 +118,7 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
                   ? <img src={s.url} alt="" className="h-full w-full object-cover" loading="lazy" />
                   : <video src={s.url} muted playsInline className="h-full w-full object-cover" />}
                 {s.kind === "video" && <span className="absolute bottom-1 right-1.5 text-[0.6875rem] font-semibold drop-shadow">VIDEO</span>}
+                {s.liked && !picking && <I n="heart" filled className="absolute bottom-1 left-1.5 h-3.5 w-3.5 text-[#ff453a] drop-shadow" />}
                 {picking && (
                   <span className={`absolute inset-0 transition-colors ${chosen.includes(s.id) ? "bg-black/35" : ""}`}>
                     <span className={`absolute bottom-1.5 right-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full border-[1.5px] ${chosen.includes(s.id) ? "border-[var(--accent)] bg-[var(--accent)] text-black" : "border-white/80 bg-black/25"}`}>
@@ -152,11 +181,39 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
             <div className="safe-t flex items-center justify-between px-3 pt-2">
               <motion.button whileTap={press} transition={snappy} aria-label="Close" onClick={() => setOpen(null)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.09]"><I n="close" className="h-[19px] w-[19px]" /></motion.button>
               <span className="text-[0.8125rem] tabular-nums text-white/45">{idx + 1} of {shots.length}</span>
-              <span className="w-10" />
+              <motion.button whileTap={press} transition={snappy} onClick={() => likeNow(cur)} aria-label={cur.liked ? "Unlike" : "Like"} aria-pressed={!!cur.liked}
+                className={`flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.09] ${cur.liked ? "text-[#ff453a]" : ""}`}>
+                <I n="heart" filled={!!cur.liked} className="h-[19px] w-[19px]" />
+              </motion.button>
             </div>
 
-            {/* The tile grows into this and shrinks back on close; swipe sideways for the next shot, down to close. */}
+            {/* Drag this handle down (or tap it) to see what made the shot: look, film, camera, roughly where. */}
+            <motion.div drag="y" dragConstraints={{ top: 0, bottom: 0 }} dragElastic={0.5} dragMomentum={false}
+              onDragEnd={(_, i) => { if (Math.abs(i.offset.y) > 18) toggleInfo(); }}
+              onClick={toggleInfo} aria-expanded={info} aria-label="Shot details"
+              className="flex cursor-grab touch-none justify-center py-1.5 active:cursor-grabbing">
+              <span className="flex items-center gap-1 rounded-full bg-white/[0.09] px-3 py-1">
+                <I n="chevD" className={`h-3 w-3 text-white/50 transition-transform ${info ? "rotate-180" : ""}`} w={2.4} />
+                <span className="text-[0.6875rem] font-medium text-white/50">Details</span>
+              </span>
+            </motion.div>
+
+            <AnimatePresence initial={false}>
+              {info && (
+                <motion.div key="info" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={fade} className="overflow-hidden px-4">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 rounded-2xl bg-white/[0.06] p-3.5 pb-3">
+                    <InfoRow icon="looks" label="Look" value={cur.look ?? "Default"} />
+                    <InfoRow icon="film" label="Film" value={cur.film ?? "None"} />
+                    <InfoRow icon="camera" label="Camera" value={cur.camera ?? "—"} />
+                    <InfoRow icon="pin" label="Taken near" value={cur.geo ? coordLabel(cur.geo) : "Off"} />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* The tile grows into this and shrinks back on close; swipe sideways for the next shot, down to close, double-tap to like. */}
             <motion.div layoutId={`shot-${cur.id}`} transition={morph} className="relative min-h-0 flex-1" drag dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }} dragElastic={0.45}
+              onClick={() => onImageTap(cur)}
               onDragEnd={(_, i) => {
                 if (i.offset.y > 110 && Math.abs(i.offset.y) > Math.abs(i.offset.x)) { tap(); setOpen(null); }
                 else if (i.offset.x < -70 && shots[idx + 1]) { tap(); setOpen(shots[idx + 1].id); }
@@ -165,6 +222,14 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
               {cur.kind === "photo"
                 ? <img src={full ?? cur.url} alt="" className="h-full w-full object-contain" />
                 : full && <video src={full} controls autoPlay loop playsInline className="h-full w-full object-contain" />}
+              <AnimatePresence>
+                {burst !== 0 && (
+                  <motion.div key={burst} initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: [0.5, 1.15, 1], opacity: [0, 1, 1] }} exit={{ opacity: 0, scale: 1.25 }}
+                    transition={{ duration: 0.55, times: [0, 0.55, 1] }} className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <I n="heart" filled className="h-24 w-24 text-white drop-shadow-[0_4px_24px_rgba(0,0,0,.55)]" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
 
             <div className="flex items-center justify-center gap-2.5 px-4 pb-5 pt-4 safe-b">
@@ -182,5 +247,17 @@ export function Roll({ shots, trash, onShare, onSave, onDelete, onCamera, onImpo
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+function InfoRow({ icon, label, value }: { icon: "looks" | "film" | "camera" | "pin"; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08]"><I n={icon} className="h-[15px] w-[15px] text-white/55" /></span>
+      <span className="min-w-0">
+        <span className="block text-[0.6875rem] text-white/40">{label}</span>
+        <span className="block truncate text-[0.8125rem] font-medium">{value}</span>
+      </span>
+    </div>
   );
 }

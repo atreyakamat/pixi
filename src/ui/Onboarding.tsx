@@ -6,18 +6,20 @@ import { I } from "./icons";
 import { press, reveal, snappy, tap } from "./motion";
 import { canPickFolder, pickFolder } from "./saveTarget";
 import { isNative } from "./native";
+import { requestLocation } from "./permissions";
 
 type Ask = "idle" | "asking" | "denied" | "done";
 
 /**
- * Four screens: the promise, then one ask each for camera, microphone and where files go. Every ask
- * says what it is for before the system prompt appears, and every one can be skipped — a refused
- * permission costs one feature, never the app.
+ * Five screens: the promise, then one ask each for camera, microphone, location and where files go.
+ * Every ask says what it is for before the system prompt appears, and every one can be skipped — a
+ * refused permission costs one feature, never the app.
  */
 export function Onboarding({ onFinish }: { onFinish: () => void }) {
   const [i, setI] = useState(0);
   const [cam, setCam] = useState<Ask>("idle");
   const [mic, setMic] = useState<Ask>("idle");
+  const [loc, setLoc] = useState<Ask>("idle");
   const [folder, setFolder] = useState<Ask>("idle");
   const [folderName, setFolderName] = useState("");
 
@@ -43,6 +45,12 @@ export function Onboarding({ onFinish }: { onFinish: () => void }) {
     setI(3);
   };
 
+  const allowLocation = async () => {
+    tap(); setLoc("asking");
+    setLoc((await requestLocation()) ? "done" : "denied");
+    setI(4);
+  };
+
   const choose = async () => {
     tap(); setFolder("asking");
     try {
@@ -53,7 +61,7 @@ export function Onboarding({ onFinish }: { onFinish: () => void }) {
   };
 
   // The folder step is Android-only; elsewhere the gallery is the only destination there is.
-  const steps = canPickFolder() ? 4 : 3;
+  const steps = canPickFolder() ? 5 : 4;
   const done = () => { tap(); onFinish(); };
 
   return (
@@ -97,6 +105,17 @@ export function Onboarding({ onFinish }: { onFinish: () => void }) {
           )}
 
           {i === 3 && (
+            <Screen key="loc" icon="pin">
+              <h1 className="t-title1 mt-10">Where it was taken</h1>
+              <p className="t-body mt-4 max-w-[18rem] text-white/50">
+                {loc === "denied"
+                  ? "No location, so shots won't carry where they were taken. You can allow it later in Settings."
+                  : "Tags each shot with roughly where it was taken, for your own Roll. Never a map, never sent anywhere."}
+              </p>
+            </Screen>
+          )}
+
+          {i === 4 && (
             <Screen key="save" icon="save">
               <h1 className="t-title1 mt-10">Where photos go</h1>
               <p className="t-body mt-4 max-w-[18rem] text-white/50">
@@ -130,6 +149,13 @@ export function Onboarding({ onFinish }: { onFinish: () => void }) {
 
         {i === 3 && (
           <>
+            <Primary onClick={allowLocation} disabled={loc === "asking"}>Allow location</Primary>
+            <Skip onClick={() => setI(4)}>Skip, no location tag</Skip>
+          </>
+        )}
+
+        {i === 4 && (
+          <>
             {folder === "done"
               ? <Primary onClick={done}>Start shooting</Primary>
               : <Primary onClick={choose} disabled={folder === "asking"}>Choose a folder</Primary>}
@@ -141,7 +167,7 @@ export function Onboarding({ onFinish }: { onFinish: () => void }) {
   );
 }
 
-function Screen({ children, icon }: { children: React.ReactNode; icon?: "camera" | "mic" | "save" }) {
+function Screen({ children, icon }: { children: React.ReactNode; icon?: "camera" | "mic" | "save" | "pin" }) {
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={reveal} className="flex flex-col items-center text-center">
       {icon && (

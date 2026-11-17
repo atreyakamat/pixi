@@ -25,7 +25,7 @@ export async function storageEstimate(): Promise<{ used: number; quota: number }
 
 interface Manifest {
   app: "pixi"; version: 1; made: number;
-  items: { id: string; file: string; kind: RollItem["kind"]; ext: string; created: number; camera?: string }[];
+  items: { id: string; file: string; kind: RollItem["kind"]; ext: string; created: number; camera?: string; look?: string; film?: string; geo?: { lat: number; lon: number }; liked?: boolean }[];
 }
 
 const MAX_ITEMS = 5000;
@@ -43,7 +43,7 @@ export async function backupRoll(onProgress?: (done: number, total: number) => v
     const ext = SAFE_EXT.test(it.ext) ? it.ext : "jpg";
     const file = `shots/${it.id}.${ext}`;
     files[file] = [new Uint8Array(await it.blob.arrayBuffer()), { level: 0 }];
-    manifest.items.push({ id: it.id, file, kind: it.kind, ext, created: it.created, camera: it.camera });
+    manifest.items.push({ id: it.id, file, kind: it.kind, ext, created: it.created, camera: it.camera, look: it.look, film: it.film, geo: it.geo, liked: it.liked });
     onProgress?.(++n, items.length);
   }
   const bytes = await new Promise<Uint8Array>((res, rej) => zip({ ...files, "pixi.json": [new TextEncoder().encode(JSON.stringify(manifest)), { level: 6 }] }, (e, d) => (e ? rej(e) : res(d))));
@@ -83,7 +83,11 @@ export async function restoreRoll(file: Blob, onProgress?: (done: number, total:
     if (!idOk(e.id) || !SAFE_EXT.test(ext) || !path.startsWith("shots/") || path.includes("..") || !bytes || sniffBytes(bytes) !== (ext === "jpeg" ? "jpg" : ext)) { skipped++; continue; }
     const kind: RollItem["kind"] = e.kind === "video" ? "video" : "photo";
     const created = typeof e.created === "number" && Number.isFinite(e.created) ? Math.min(Math.max(e.created, 0), Date.now() + 86400000) : Date.now();
-    items.push({ id: e.id, kind, ext, blob: new Blob([bytes as BlobPart], { type: MIME[ext] }), created, camera: str(e.camera, 64) ?? undefined });
+    const geo = e.geo && Number.isFinite(e.geo.lat) && Number.isFinite(e.geo.lon) ? { lat: e.geo.lat, lon: e.geo.lon } : undefined;
+    items.push({
+      id: e.id, kind, ext, blob: new Blob([bytes as BlobPart], { type: MIME[ext] }), created,
+      camera: str(e.camera, 64) ?? undefined, look: str(e.look, 64) ?? undefined, film: str(e.film, 64) ?? undefined, geo, liked: e.liked === true,
+    });
     onProgress?.(i + 1, list.length);
   }
   const added = await rollImportMany(items);

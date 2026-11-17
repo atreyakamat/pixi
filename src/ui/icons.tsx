@@ -31,11 +31,14 @@ const P: Record<string, string> = {
   undo: "M9 7 4 12l5 5M4 12h9a6 6 0 0 1 0 12h-1",
   redo: "M15 7l5 5-5 5M20 12h-9a6 6 0 0 0 0 12h1",
   gear: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM19.4 13a7.9 7.9 0 0 0 0-2l2-1.5-2-3.4-2.3 1a8 8 0 0 0-1.7-1l-.4-2.6h-4l-.4 2.6a8 8 0 0 0-1.7 1l-2.3-1-2 3.4L6.6 11a7.9 7.9 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a8 8 0 0 0 1.7 1l.4 2.6h4l.4-2.6a8 8 0 0 0 1.7-1l2.3 1 2-3.4Z",
+  heart: "M12 20s-7-4.4-9.5-9A5.5 5.5 0 0 1 12 6.2 5.5 5.5 0 0 1 21.5 11c-2.5 4.6-9.5 9-9.5 9Z",
+  pin: "M12 21s6.5-5.8 6.5-11A6.5 6.5 0 0 0 5.5 10c0 5.2 6.5 11 6.5 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
+  info: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 11v6M12 7.5h.01",
 };
 export type IconName = keyof typeof P;
-export function I({ n, className = "h-5 w-5", w = 1.8 }: { n: IconName; className?: string; w?: number }) {
+export function I({ n, className = "h-5 w-5", w = 1.8, filled = false }: { n: IconName; className?: string; w?: number; filled?: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+    <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <path d={P[n]} />
     </svg>
   );
