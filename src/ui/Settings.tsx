@@ -9,7 +9,11 @@ import { backupRoll, keepStorage, restoreRoll, storageEstimate } from "./backup"
 import { exportDocument } from "./native";
 import { BUDGET, report } from "./perf";
 import { isNative } from "./native";
+import dynamic from "next/dynamic";
 import { StudioSendPanel } from "./StudioSend";
+
+// Wedding Pola's panel loads only in that build, so the public app never fetches its code.
+const WedPolaSendPanel = dynamic(() => import("@/wedpola/SendPanel").then((m) => m.WedPolaSendPanel), { ssr: false, loading: () => null });
 import { canPickFolder, loadSaveTarget, pickFolder, saveSaveTarget } from "./saveTarget";
 import { cameraState, locationState, micState, type PermState, requestLocation, requestMedia, settingsPath } from "./permissions";
 
@@ -200,7 +204,7 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRe
       </header>
 
       <div className="space-y-6">
-        <StudioSendPanel say={say} />
+        {process.env.NEXT_PUBLIC_PIXI_TARGET === "wedpola" ? <WedPolaSendPanel say={say} /> : <StudioSendPanel say={say} />}
         <Group title="Saving" note={settings.saveMode === "auto"
           ? "Every shot is kept in Pixi and copied to your phone's gallery straight away."
           : "Shots are kept in Pixi only. Open one from the Roll and tap Save when you want it on your phone."}>

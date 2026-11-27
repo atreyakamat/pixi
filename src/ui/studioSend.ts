@@ -1,4 +1,5 @@
 import { makeThumb, rollAll, type RollItem } from "./roll";
+import { authHeaders, fileNameFor, projectCreateBody, projectNameFor, workerUrl, type Conn } from "./studioRequests";
 
 /**
  * "Send to studio": uploads the Roll's photos to a wed-idea studio, using the
@@ -40,10 +41,15 @@ export function onTokenChange(callback: () => void): () => void {
 
 export type SendResult = { ok: true; sent: number; skipped: number; project: string } | { ok: false; reason: string };
 
-async function api<T>(token: string, path: string, body?: unknown, method: "GET" | "POST" = "POST"): Promise<T> {
-  const res = await fetch(`${STUDIO_SITE}/api/worker${path}`, {
+/** Where a Roll goes: a project that already exists, or a new one named for the day. */
+export type SendTarget =
+  | { kind: "existing"; projectId: string; projectName: string }
+  | { kind: "new"; organizationId?: string };
+
+async function api<T>(conn: Conn, path: string, body?: unknown, method: "GET" | "POST" = "POST"): Promise<T> {
+  const res = await fetch(workerUrl(conn.site, path), {
     method,
-    headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    headers: authHeaders(conn.bearer, Boolean(body)),
     body: body ? JSON.stringify(body) : undefined,
     cache: "no-store",
   });
@@ -66,26 +72,32 @@ async function put(url: string, blob: Blob): Promise<void> {
   if (!res.ok) throw new Error("A photo didn't upload. Try again.");
 }
 
-/** Sends every photo in the Roll to a new project named for the day. */
+/** Sends every photo in the Roll to a new project named for the day (the PC-token path). */
 export async function sendRoll(token: string, onProgress: (done: number, total: number) => void, items?: RollItem[]): Promise<SendResult> {
   if (!STUDIO_BUILD) return { ok: false, reason: "Sending to a studio isn't set up in this app." };
+  return sendRollTo({ site: STUDIO_SITE ?? "", bearer: token }, { kind: "new" }, onProgress, items);
+}
+
+/** Sends every photo in the Roll to the target, with whatever token the connection carries. */
+export async function sendRollTo(conn: Conn, target: SendTarget, onProgress: (done: number, total: number) => void, items?: RollItem[]): Promise<SendResult> {
   const photos = (items ?? (await rollAll())).filter((i) => i.kind === "photo");
   if (!photos.length) return { ok: false, reason: "The Roll has no photos to send." };
   try {
-    const name = `Pixi ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
-    const { project } = await api<{ project: { id: string; name: string } }>(token, "/projects", { name, kind: "other" });
+    const project = target.kind === "new"
+      ? (await api<{ project: { id: string; name: string } }>(conn, "/projects", projectCreateBody(projectNameFor(new Date()), target.organizationId))).project
+      : { id: target.projectId, name: target.projectName };
     let sent = 0, skipped = 0;
     for (const [i, item] of photos.entries()) {
       const size = await dimensions(item.blob);
       if (!size) { skipped++; onProgress(i + 1, photos.length); continue; }
       const thumb = item.thumb ?? (await makeThumb(item.blob));
       if (!thumb) { skipped++; onProgress(i + 1, photos.length); continue; }
-      const links = await api<{ photoId: string; full: string; thumb: string }>(token, `/projects/${project.id}/uploads`, {});
+      const links = await api<{ photoId: string; full: string; thumb: string }>(conn, `/projects/${project.id}/uploads`, {});
       await put(links.full, item.blob);
       await put(links.thumb, thumb);
-      await api(token, `/projects/${project.id}/photos`, {
+      await api(conn, `/projects/${project.id}/photos`, {
         photoId: links.photoId,
-        fileName: `pixi-${item.id}.${item.ext || "jpg"}`,
+        fileName: fileNameFor(item.id, item.ext),
         width: size.width,
         height: size.height,
         bytes: item.blob.size,

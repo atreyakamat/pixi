@@ -2,12 +2,22 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { MotionConfig } from "framer-motion";
 import { Offline } from "@/ui/Offline";
+import { supabaseOrigin } from "@/wedpola/config";
 
-export const metadata: Metadata = {
-  title: "Pixi",
-  description: "Retro camera looks, free and on-device.",
-  manifest: "/manifest.webmanifest",
-};
+const WEDPOLA = process.env.PIXI_TARGET === "wedpola";
+
+export const metadata: Metadata = WEDPOLA
+  ? {
+      title: "Wedding Pola",
+      description: "Send your wedding photos to your studio and manage your projects.",
+      manifest: "/manifest.webmanifest",
+      icons: { apple: "/wedpola/icon-192.png" },
+    }
+  : {
+      title: "Pixi",
+      description: "Retro camera looks, free and on-device.",
+      manifest: "/manifest.webmanifest",
+    };
 
 /**
  * Pixi runs from local files and talks to no server. The policy says so: nothing loads from the
@@ -17,6 +27,10 @@ export const metadata: Metadata = {
 // The studio build (NEXT_PUBLIC_PIXI_STUDIO=1) may send photos to its studio site and
 // to the storage that holds them. The public build keeps connect-src to itself.
 const STUDIO_HOSTS = process.env.NEXT_PUBLIC_PIXI_STUDIO === "1" ? `${(process.env.NEXT_PUBLIC_STUDIO_SITE ?? "").trim().replace(/\/+$/, "")} https://*.supabase.co` : "";
+// The Wedding Pola build may sign in to its Supabase project and send to its studio site, nothing else.
+const WEDPOLA_HOSTS = WEDPOLA
+  ? [supabaseOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL) ?? "https://*.supabase.co", (process.env.NEXT_PUBLIC_STUDIO_SITE ?? "").trim().replace(/\/+$/, "")].filter(Boolean).join(" ")
+  : "";
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
@@ -24,7 +38,7 @@ const CSP = [
   "img-src 'self' blob: data:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  `connect-src 'self' blob: data: ${STUDIO_HOSTS}`.replace(/ +$/, ""),
+  `connect-src 'self' blob: data: ${[STUDIO_HOSTS, WEDPOLA_HOSTS].filter(Boolean).join(" ")}`.replace(/ +$/, ""),
   "worker-src 'self' blob:",
   "frame-src 'none'",
   "object-src 'none'",

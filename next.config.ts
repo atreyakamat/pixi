@@ -1,10 +1,11 @@
 import type { NextConfig } from "next";
 
-// Three targets. "app": static files for the Android wrapper, root is the camera.
+// Four targets. "app": static files for the Android wrapper, root is the camera.
 // "web": static files for a host like Netlify, root is the landing page and the app is at /app/.
+// "wedpola": static files for the Wedding Pola PWA, root is its sign-in screen, then the camera.
 // Unset: the dev server, laid out like "web".
 const target = process.env.PIXI_TARGET;
-const isApp = target === "app" || target === "web";
+const isApp = target === "app" || target === "web" || target === "wedpola";
 
 const nextConfig: NextConfig = {
   // The build target and a build stamp, readable in the browser. The stamp renews the offline worker on each deploy.

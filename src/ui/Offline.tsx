@@ -2,12 +2,15 @@
 import { useEffect } from "react";
 
 /**
- * Registers the offline worker on the hosted web build. Not in the Android app (its files are
+ * Registers the offline worker on the hosted web build and on Wedding Pola (each ships its own
+ * sw.js). Not in the Android app (its files are
  * already on the phone) and not in development (a cache would hide your edits).
  */
 export function Offline() {
   useEffect(() => {
-    if (process.env.NEXT_PUBLIC_PIXI_TARGET !== "web" || !("serviceWorker" in navigator)) return;
+    // The Wedding Pola build has its own worker file at the same address on its own site.
+    const target = process.env.NEXT_PUBLIC_PIXI_TARGET;
+    if ((target !== "web" && target !== "wedpola") || !("serviceWorker" in navigator)) return;
     let dead = false;
     const report = () => {
       if (dead) return;
