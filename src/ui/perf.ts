@@ -47,8 +47,11 @@ export function report(): PerfReport {
     medianMs: +med.toFixed(1),
     p95Ms: +pct(iv, 0.95).toFixed(1),
     drawMs: +pct(wk, 0.5).toFixed(1),
-    // Frames that took more than two refreshes: the stutters you can see.
-    jank: iv.filter((x) => x > BUDGET.frameMs * 2).length,
+    // Frames that took more than two refreshes: the stutters you can see. Measured against this
+    // device's own median interval, not a hardcoded 60Hz assumption — a 120/144Hz screen has a much
+    // shorter real refresh, and comparing against 16.7ms would either miss real stutters (threshold
+    // too loose) or flag healthy frames (threshold too tight), depending on which way it was off.
+    jank: iv.filter((x) => x > Math.max(med, BUDGET.frameMs) * 2).length,
     feedbackMs: Math.round(pct(latency.feedback, 0.5)),
     savedMs: Math.round(pct(latency.saved, 0.5)),
   };

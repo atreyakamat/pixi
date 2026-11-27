@@ -278,12 +278,33 @@ export default function PixiApp() {
     r.setSource(s, s.width, s.height);
     r.warmUp();
     r.onRestored = () => { r.warmUp(); };
-    // Adaptive quality: aim for a 60fps preview and trade resolution, not frame rate, on slower phones.
+    // Adaptive quality: trade resolution, not frame rate, to fit inside whatever this display's actual
+    // frame budget is. Phones run 60/90/120/144Hz screens, and rAF already fires at the real refresh
+    // rate — but the old thresholds here were hardcoded for a 16.7ms (60Hz) budget, so on a faster
+    // screen the loop could judder instead of smoothly tracking it. Instead, estimate the true budget
+    // from the shortest recent frame-to-frame gap (a dropped frame only ever makes a gap longer, a
+    // multiple of the real interval, never shorter), and scale the slow/fast cutoffs off that.
     const MAX = 1100;
     let raf = 0, side = MAX, slow = 0, fast = 0;
     const t0 = performance.now();
+    let lastT = 0;
+    const INTERVAL_WINDOW = 30;
+    const intervals: number[] = [];
+    let budgetMs = 1000 / 60; // default assumption until real frame timing has been observed
     const loop = (t: number) => {
-      if (pauseRef.current || sheetRef.current || bootRef.current === "onboard" || !(viewRef.current === "camera" || viewRef.current === "builder") || document.hidden) { raf = requestAnimationFrame(loop); return; }
+      if (pauseRef.current || sheetRef.current || bootRef.current === "onboard" || !(viewRef.current === "camera" || viewRef.current === "builder") || document.hidden) {
+        lastT = 0; // the gap while paused isn't a real frame interval — don't let it pollute the estimate
+        raf = requestAnimationFrame(loop); return;
+      }
+      if (lastT) {
+        const dt = t - lastT;
+        if (dt > 0 && dt < 50) { // ignore the first frame after a resume and any freak multi-second gaps
+          intervals.push(dt);
+          if (intervals.length > INTERVAL_WINDOW) intervals.shift();
+          if (intervals.length >= 6) budgetMs = Math.max(4, Math.min(...intervals));
+        }
+      }
+      lastT = t;
       const v = cam.videoRef.current, src = srcRef.current, ov = overrideRef.current;
       if (ov) r.setSource(ov.el, ov.w, ov.h);
       else if (v && v.readyState >= 2 && v.videoWidth) r.setSource(v, v.videoWidth, v.videoHeight);
@@ -292,8 +313,9 @@ export default function PixiApp() {
       r.render({ ...optsRef.current, maxSide: side }, (t - t0) / 1000);
       const cost = performance.now() - a;
       perfFrame(cost);
-      if (cost > 13) { fast = 0; if (++slow > 8 && side > 420) { side = Math.round(side * 0.82); slow = 0; } }
-      else if (cost < 6) { slow = 0; if (++fast > 90 && side < MAX) { side = Math.min(MAX, Math.round(side * 1.12)); fast = 0; } }
+      const slowAt = budgetMs * 0.8, fastAt = budgetMs * 0.35;
+      if (cost > slowAt) { fast = 0; if (++slow > 8 && side > 420) { side = Math.round(side * 0.82); slow = 0; } }
+      else if (cost < fastAt) { slow = 0; if (++fast > 90 && side < MAX) { side = Math.min(MAX, Math.round(side * 1.12)); fast = 0; } }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
