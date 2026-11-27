@@ -12,6 +12,7 @@ import { isNative } from "./native";
 import { StudioSendPanel } from "./StudioSend";
 import { canPickFolder, loadSaveTarget, pickFolder, saveSaveTarget } from "./saveTarget";
 import { cameraState, locationState, micState, type PermState, requestLocation, requestMedia, settingsPath } from "./permissions";
+import { copyCameraInfo } from "./cameraDiag";
 
 const mb = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
@@ -34,6 +35,43 @@ function PerfRows() {
       <Row label="Viewfinder" sub={`${r.fps} fps · median ${r.medianMs} ms${mark(r.medianMs, BUDGET.frameMs + 0.5)} · 95th ${r.p95Ms} ms · ${r.jank} stutters in ${r.frames} frames`} />
       <Row label="Shutter" sub={r.feedbackMs ? `On screen in ${r.feedbackMs} ms${mark(r.feedbackMs, BUDGET.feedbackMs)} · in your roll in ${r.savedMs || "–"} ms${mark(r.savedMs, BUDGET.savedMs)}` : "Take a photo to measure"} />
     </>
+  );
+}
+
+/** Reads back exactly what this phone's browser reports for its cameras (labels, zoom range, facing),
+ *  so lens detection can be tuned to real hardware instead of guessed. Copies JSON to the clipboard;
+ *  falls back to an on-screen block to copy by hand if the WebView blocks clipboard writes. */
+function CameraDiagGroup({ say }: { say: (m: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [fallback, setFallback] = useState("");
+
+  const copy = async () => {
+    tap(); setBusy(true); setFallback("");
+    try {
+      const { ok, text } = await copyCameraInfo();
+      if (ok) say("Camera info copied — paste it back to me");
+      else setFallback(text);
+    } catch {
+      say("Couldn't read camera info on this phone.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Group title="Camera diagnostics" note="What this phone's browser reports about its cameras — labels, zoom range, which one answered. Useful if a lens or flip looks wrong and you want to send the details along.">
+      <Row label="Camera info" sub="Copies device labels and capabilities, nothing identifying">
+        <button onClick={() => void copy()} disabled={busy} className="shrink-0 rounded-full bg-white/[0.12] px-3.5 py-1.5 text-[0.8125rem] font-medium disabled:opacity-50">
+          {busy ? "Reading…" : "Copy"}
+        </button>
+      </Row>
+      {fallback && (
+        <div className="px-4 py-3">
+          <p className="pb-1.5 text-[0.75rem] text-white/45">Clipboard was blocked — select and copy this by hand:</p>
+          <textarea readOnly value={fallback} onFocus={(e) => e.currentTarget.select()}
+            className="h-32 w-full rounded-lg bg-black/40 p-2 font-mono text-[0.6875rem] text-white/80" />
+        </div>
+      )}
+    </Group>
   );
 }
 
@@ -255,6 +293,8 @@ export function SettingsScreen({ settings, setSettings, onClose, onCleared, onRe
           </Row>
           <PerfRows />
         </Group>
+
+        <CameraDiagGroup say={say} />
 
         <Group title="Storage" note={`Pixi keeps your most recent ${settings.rollLimit} shots on this phone. Older ones drop off on their own.`}>
           <Row label="Your roll" sub={use ? `${use.count} ${use.count === 1 ? "shot" : "shots"} · ${mb(use.bytes)}` : "Measuring…"} />
